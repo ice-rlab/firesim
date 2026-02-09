@@ -129,6 +129,33 @@ object InternalAutoCounterFirrtlAnnotation {
   }
 }
 
+case class InternalTraceDoctorFirrtlAnnotation(
+  target:         ReferenceTarget,
+  clock:          ReferenceTarget,
+  reset:          ReferenceTarget,
+  label:          String,
+  description:    String,
+  coverGenerated: Boolean           = false,
+) extends Annotation
+    with DontTouchAllTargets {
+  def update(renames: RenameMap): Seq[Annotation] = {
+    val renamer       = new ReferenceTargetRenamer(renames)
+    val renamedTarget = renamer.exactRename(target)
+    val renamedClock  = renamer.exactRename(clock)
+    val renamedReset  = renamer.exactRename(reset)
+    Seq(this.copy(target = renamedTarget, clock = renamedClock, reset = renamedReset))
+  }
+  // The TraceDoctor transform will reject this annotation if it's not enclosed
+  def shouldBeIncluded(modList: Seq[String]): Boolean = !coverGenerated || modList.contains(target.module)
+  def enclosingModule(): String             = target.module
+  def enclosingModuleTarget(): ModuleTarget = ModuleTarget(target.circuit, enclosingModule())
+}
+object InternalTraceDoctorFirrtlAnnotation {
+  def apply(a: TraceDoctorFirrtlAnnotation): InternalTraceDoctorFirrtlAnnotation = {
+    InternalTraceDoctorFirrtlAnnotation(a.target, a.clock, a.reset, a.label, a.description, a.coverGenerated)
+  }
+}
+
 case class InternalTriggerSourceAnnotation(
   target:     ReferenceTarget,
   clock:      ReferenceTarget,
