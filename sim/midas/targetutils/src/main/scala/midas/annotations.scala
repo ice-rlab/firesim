@@ -198,6 +198,88 @@ object ExcludeInstanceAsserts {
     }
 }
 
+/** TraceDoctor annotations. Do not emit the FIRRTL annotations unless you are writing a target transformation, use the
+  * Chisel-side [[TraceDoctor]] object instead.
+  */
+case class TraceDoctorFirrtlAnnotation(
+  target:         ReferenceTarget,
+  clock:          ReferenceTarget,
+  reset:          ReferenceTarget,
+  label:          String,
+  description:    String,
+  coverGenerated: Boolean           = false,
+) extends firrtl.annotations.Annotation
+    //with HasSerializationHints
+    {
+  def update(renames: RenameMap): Seq[firrtl.annotations.Annotation] = {
+    val renamer       = new ReferenceTargetRenamer(renames)
+    val renamedTarget = renamer.exactRename(target)
+    val renamedClock  = renamer.exactRename(clock)
+    val renamedReset  = renamer.exactRename(reset)
+    Seq(this.copy(target = renamedTarget, clock = renamedClock, reset = renamedReset))
+  }
+  // The TraceDoctor tranform will reject this annotation if it's not enclosed
+  def shouldBeIncluded(modList: Seq[String]): Boolean = !coverGenerated || modList.contains(target.module)
+  def enclosingModule(): String             = target.module
+  def enclosingModuleTarget(): ModuleTarget = ModuleTarget(target.circuit, enclosingModule())
+  //def typeHints: Seq[Class[_]]              = Seq(opType.getClass)
+}
+
+object TraceDoctorTarget {
+  private def emitAnnotation(
+    target:      UInt,
+    clock:       Clock,
+    reset:       Reset,
+    label:       String,
+    description: String,
+  ): Unit = {
+    println(s"    TraceDoctorTarget.emitAnnotation ${label} ${description}")
+    requireIsHardware(target, "Target passed to PerfCounter:")
+    requireIsHardware(clock, "Clock passed to PerfCounter:")
+    requireIsHardware(reset, "Reset passed to PerfCounter:")
+    annotate(new ChiselAnnotation {
+      def toFirrtl =
+        TraceDoctorFirrtlAnnotation(target.toTarget, clock.toTarget, reset.toTarget, label, description)
+    })
+  }
+
+  /** Labels a signal as an event for which an host-side tracer (an "TraceDoctorTarget") should be generated). Events can be
+    * multi-bit to encode multiple occurances in a cycle (e.g., the number of instructions retired in a superscalar
+    * processor). NB: Golden Gate will not generate the coutner unless TraceDoctor is enabled in your the platform
+    * config. See the docs.fires.im for end-to-end usage information.
+    *
+    * @param target
+    *   The number of occurrences of the event (in the current cycle)
+    *
+    * @param clock
+    *   The clock to which this event is sychronized.
+    *
+    * @param reset
+    *   If the event is asserted while under the provide reset, it is not counted. TODO: This should be made optional.
+    *
+    * @param label
+    *   A verilog-friendly identifier for the event signal
+    *
+    * @param description
+    *   A human-friendly description of the event.
+    */
+  def apply(
+    target:      UInt,
+    clock:       Clock,
+    reset:       Reset,
+    label:       String,
+    description: String,
+  ): Unit =
+    emitAnnotation(target, clock, reset, label, description)
+
+  /** A simplified variation of the full apply method above that uses the implicit clock and reset.
+    */
+  def apply(target: UInt, label: String, description: String): Unit = {
+    println(s"    TraceDoctorTarget.apply ${label} ${description}")
+    emitAnnotation(target, Module.clock, Module.reset, label, description)
+  }
+}
+
 sealed trait PerfCounterOpType
 
 object PerfCounterOps {
