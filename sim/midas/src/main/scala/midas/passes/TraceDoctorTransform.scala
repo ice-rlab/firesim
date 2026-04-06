@@ -60,81 +60,9 @@ class TraceDoctorTransform extends Transform {
   ): DefModule = mod match {
     case m: Module if coverTupleAnnoMap.isDefinedAt(m.name) =>
       val coverAnnos = coverTupleAnnoMap(m.name)
-      val mT         = coverAnnos.head.enclosingModuleTarget()
-      val moduleNS   = Namespace(mod)
-      val addedStmts = coverAnnos.flatMap({ anno =>
-        val eventName = moduleNS.newName(anno.label)
-        updatedAnnos += anno.copy(target = mT.ref(eventName))
-        Seq(
-          DefWire(NoInfo, eventName, UIntType(UnknownWidth)),
-          Connect(NoInfo, WRef(eventName), Mux(WRef(anno.reset.ref), zero, WRef(anno.target.ref))),
-        )
-      })
-      m.copy(body = Block(m.body, addedStmts: _*))
+      updatedAnnos ++= coverAnnos
+      m
     case o                                                  => o
-  }
-
-  private def onModulePrintfImpl(
-    coverTupleAnnoMap: Map[String, Seq[InternalTraceDoctorFirrtlAnnotation]],
-    addedAnnos:        mutable.ArrayBuffer[Annotation],
-  )(mod:               DefModule
-  ): DefModule = mod match {
-    case m: Module if coverTupleAnnoMap.isDefinedAt(m.name) =>
-      val coverAnnos = coverTupleAnnoMap(m.name)
-      val mT         = coverAnnos.head.enclosingModuleTarget()
-      val moduleNS   = Namespace(mod)
-      val addedStmts = new mutable.ArrayBuffer[Statement]
-
-      val countType = UIntType(IntWidth(64))
-      val zeroLit   = UIntLiteral(0, IntWidth(64))
-
-      def generatePrintf(
-        label:              String,
-        clock:              ReferenceTarget,
-        valueToPrint:       WRef,
-        printEnable:        Expression,
-        suggestedPrintName: String,
-      ): Unit = {
-        // Generate a trigger sink and annotate it
-        val triggerName = moduleNS.newName("trigger")
-        val trigger     = DefWire(NoInfo, triggerName, BoolType)
-        addedStmts ++= Seq(trigger, Connect(NoInfo, WRef(trigger), one))
-        addedAnnos += InternalTriggerSinkAnnotation(mT.ref(triggerName), clock)
-
-        // Now emit a printf using all the generated hardware
-        val printFormat = StringLit(s"""[TraceDoctor] $label: %d\n""")
-        val printName   = moduleNS.newName(suggestedPrintName)
-        val printStmt   =
-          Print(NoInfo, printFormat, Seq(valueToPrint), WRef(clock.ref), And(WRef(trigger), printEnable), printName)
-        addedAnnos += SynthPrintfAnnotation(mT.ref(printName))
-        addedStmts += printStmt
-      }
-
-      coverAnnos.foreach {
-        case InternalTraceDoctorFirrtlAnnotation(target, clock, reset, label, _, _) =>
-          val countName   = moduleNS.newName(label + "_counter")
-          val count       = DefRegister(NoInfo, countName, countType, WRef(clock.ref), WRef(reset.ref), zeroLit)
-          val nextName    = moduleNS.newName(label + "_next")
-          val next        =
-            DefNode(NoInfo, nextName, DoPrim(PrimOps.Add, Seq(WRef(count), WRef(target.ref)), Seq.empty, countType))
-          val countUpdate = Connect(NoInfo, WRef(count), WRef(next))
-          addedStmts ++= Seq(count, next, countUpdate)
-
-          def printEnable = Neq(WRef(target.ref), zero)
-          generatePrintf(label, clock, WRef(count), printEnable, target.ref + "_print")
-      }
-      m.copy(body = Block(m.body, addedStmts.toSeq: _*))
-    case o                                                  => o
-  }
-
-  private def implementViaPrintf(
-    state:          CircuitState,
-    eventModuleMap: Map[String, Seq[InternalTraceDoctorFirrtlAnnotation]],
-  ): CircuitState = {
-
-    val addedAnnos     = new mutable.ArrayBuffer[Annotation]()
-    val updatedModules = state.circuit.modules.map(onModulePrintfImpl(eventModuleMap, addedAnnos))
-    state.copy(circuit = state.circuit.copy(modules = updatedModules), annotations = state.annotations ++ addedAnnos)
   }
 
   private def implementViaBridge(
@@ -143,9 +71,12 @@ class TraceDoctorTransform extends Transform {
   ): CircuitState = {
     println(s"    [TraceDoctorTransform] invoking implementViaBridge with ${eventModuleMap.keySet.size} map entries")
 
-    val sourceToTraceDoctorAnnoMap = eventModuleMap.values.flatten.map(anno => anno.target -> anno).toMap
+    // map target to annotation
+    // eventModuleMap.values.flatten is list of all TraceDoctor annotations
+    val sourceToTraceDoctorAnnoMap = eventModuleMap.values.flatten.map(anno => anno.target.pathlessTarget -> anno).toMap
     val bridgeTopWiringAnnos       =
       eventModuleMap.values.flatten.map(anno => BridgeTopWiringAnnotation(anno.target, anno.clock))
+    println(s"    [TraceDoctorTransform] invoking implementViaBridge with ${bridgeTopWiringAnnos.size} annotations")
 
     // Step 1: Call BridgeTopWiring, grouping all events by their source clock
     val topWiringPrefix = "tracedoctor"
@@ -166,24 +97,30 @@ class TraceDoctorTransform extends Transform {
       name -> w.toInt
     }.toMap
 
-    // MG TODO: only make one bridge annotation, not a separate bridge for each eventMetadata entry
+    println(s"    [TraceDoctorTransform] groupedOutputs size ${groupedOutputs.size}")
     val bridgeAnnos = for ((srcClockRT, oAnnos) <- groupedOutputs.toSeq.sortBy(_._1.ref)) yield {
       val sinkClockRT = oAnnos.head.sinkClockPort
       val fccas       = oAnnos.map({ anno =>
         FAMEChannelConnectionAnnotation.source(anno.topSink.ref, WireChannel, Some(sinkClockRT), Seq(anno.topSink))
       })
 
+      println(s"    [TraceDoctorTransform] oAnnos size ${oAnnos.size}")
       val eventMetadata = oAnnos.map({ anno =>
         val traceDoctorAnno = sourceToTraceDoctorAnnoMap(anno.pathlessSource)
         val pathlessLabel   = traceDoctorAnno.label
         val instPath        = anno.absoluteSource.circuit +: anno.absoluteSource.asPath.map(_._1.value)
-        val eventWidth      = portWidthMap(anno.topSink.ref)
+        val eventWidth      =
+          if (traceDoctorAnno.numBits == 0)
+            portWidthMap(anno.topSink.ref)
+          else
+            traceDoctorAnno.numBits
         TraceDoctorEventMetadata(
           anno.topSink.ref,
           //(instPath :+ pathlessLabel).mkString("_"),
           traceDoctorAnno.label,
           traceDoctorAnno.description,
           eventWidth,
+          traceDoctorAnno.power,
         )
       })
 
@@ -233,27 +170,29 @@ class TraceDoctorTransform extends Transform {
     CircuitState(updatedCircuit, wiredState.form, cleanedAnnotations ++ bridgeAnnos.flatten)
   }
 
-  def doTransform(state: CircuitState, usePrintfImplementation: Boolean): CircuitState = {
+  def doTransform(state: CircuitState): CircuitState = {
     val dir            = state.annotations.collectFirst({ case TargetDirAnnotation(dir) => dir }).get
     //select/filter which modules do we want to actually look at, and generate counters for
     //this can be done in one of two way:
     //1. Using an input file called `covermodules.txt` in a directory declared in the transform concstructor
     //2. Using chisel annotations to be added in the Platform Config (in SimConfigs.scala). The annotations are
     //   of the form TraceDoctorModuleAnnotation("ModuleName")
-    val counterAnnos   = new mutable.ArrayBuffer[InternalTraceDoctorFirrtlAnnotation]()
+    val doctorAnnos   = new mutable.ArrayBuffer[InternalTraceDoctorFirrtlAnnotation]()
     val remainingAnnos = new mutable.ArrayBuffer[Annotation]()
     println(
       s"[TraceDoctor] Scanning ${state.annotations.length} annotations"
     )
+
+    // convert all TraceDoctor annotations into InternalTraceDoctorFirrtlAnnotation
     state.annotations.foreach {
       case a: InternalTraceDoctorFirrtlAnnotation    => {
-        counterAnnos += a
+        doctorAnnos += a
         println(
           s"[TraceDoctor] Found InternalTraceDoctorFirrtlAnnotation: ${classOf[InternalTraceDoctorFirrtlAnnotation].getName}"
         )
       }
       case a: TraceDoctorFirrtlAnnotation    => {
-        counterAnnos += InternalTraceDoctorFirrtlAnnotation(a)
+        doctorAnnos += InternalTraceDoctorFirrtlAnnotation(a)
         println(
           s"[TraceDoctor] Found TraceDoctorFirrtlAnnotation: ${classOf[TraceDoctorFirrtlAnnotation].getName}"
         )
@@ -267,12 +206,12 @@ class TraceDoctorTransform extends Transform {
     }
 
     println(
-      s"[TraceDoctor] There are ${counterAnnos.length} counterAnnos available for selection in the following modules:"
+      s"[TraceDoctor] There are ${doctorAnnos.length} doctorAnnos available for selection in the following modules:"
     )
-    counterAnnos.map(_.target.module).distinct.foreach({ i => println(s"  ${i}") })
+    doctorAnnos.map(_.target.module).distinct.foreach({ i => println(s"  ${i}") })
 
     //collect annotations for manually annotated TraceDoctor perf counters
-    val filteredCounterAnnos = counterAnnos
+    val filteredCounterAnnos = doctorAnnos
     println(s"[TraceDoctor] selected ${filteredCounterAnnos.length} signals for instrumentation")
     filteredCounterAnnos.foreach({ i => println(s"  ${i}") })
 
@@ -280,7 +219,7 @@ class TraceDoctorTransform extends Transform {
     val selectedsignals = filteredCounterAnnos.groupBy(_.enclosingModule()).map { case (k, v) => k -> v.toSeq }
 
     if (!selectedsignals.isEmpty) {
-      println("[TraceDoctor] signals are:")
+      println(s"[TraceDoctor] ${selectedsignals.size} signals are:")
       selectedsignals.foreach({ case (modName, localEvents) =>
         println(s"  Module ${modName}")
         localEvents.foreach({ anno => println(s"   ${anno.label}: ${anno.description}") })
@@ -291,28 +230,23 @@ class TraceDoctorTransform extends Transform {
       val updatedModules = state.circuit.modules.map((gateEventsWithReset(selectedsignals, updatedAnnos)))
       val eventModuleMap = updatedAnnos.groupBy(_.enclosingModule()).map { case (k, v) => k -> v.toSeq }
       val gatedState     =
-        state.copy(circuit = state.circuit.copy(modules = updatedModules), annotations = remainingAnnos.toSeq)
+        state.copy(annotations = remainingAnnos.toSeq)
 
       val preppedState   = (new ResolveAndCheck).runTransform(gatedState)
 
-      if (usePrintfImplementation) {
-        implementViaPrintf(preppedState, eventModuleMap)
-      } else {
-        implementViaBridge(preppedState, eventModuleMap)
-      }
+      implementViaBridge(preppedState, eventModuleMap)
     } else { state }
   }
 
   def execute(state: CircuitState): CircuitState = {
     val p                       = state.annotations.collectFirst({ case midas.stage.phases.ConfigParametersAnnotation(p) => p }).get
     val enableTransform         = true
-    val usePrintfImplementation = false
 
-    val updatedState = if (enableTransform) doTransform(state, usePrintfImplementation) else state
+    val updatedState = if (enableTransform) doTransform(state) else state
     // Clean up tracedoctor annotations so that their ReferenceTargets, which
     // are implicitly marked as DontTouch, can be optimized across
     updatedState.copy(annotations = updatedState.annotations.filter {
-      case InternalTraceDoctorFirrtlAnnotation(_, _, _, _, _, _) => false
+      case InternalTraceDoctorFirrtlAnnotation(_, _, _, _, _, _, _, _) => false
       case _                                                        => true
     })
   }

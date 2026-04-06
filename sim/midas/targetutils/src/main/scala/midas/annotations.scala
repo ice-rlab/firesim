@@ -208,6 +208,8 @@ case class TraceDoctorFirrtlAnnotation(
   label:          String,
   description:    String,
   coverGenerated: Boolean           = false,
+  numBits:        Int               = 0,
+  power:          Double            = 0.0,
 ) extends firrtl.annotations.Annotation
     //with HasSerializationHints
     {

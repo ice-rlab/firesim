@@ -138,7 +138,7 @@ class BridgeTopWiring(val prefix: String) extends firrtl.Transform {
     )
 
     val inputAnnos    = state.annotations.collect({ case a: BridgeTopWiringAnnotation => a })
-    val localClockMap = inputAnnos.map(anno => anno.target -> anno.clock).toMap
+    val localClockMap = inputAnnos.map(anno => anno.target.pathlessTarget -> anno.clock).toMap
 
     // Step 1: Invoke top wiring
     // Hacky: Instead of generated output files, instead sneak out the mappings from the TopWiring

@@ -136,6 +136,8 @@ case class InternalTraceDoctorFirrtlAnnotation(
   label:          String,
   description:    String,
   coverGenerated: Boolean           = false,
+  numBits:        Int               = 0,
+  power:          Double            = 0.0,
 ) extends Annotation
     with DontTouchAllTargets {
   def update(renames: RenameMap): Seq[Annotation] = {
@@ -152,7 +154,7 @@ case class InternalTraceDoctorFirrtlAnnotation(
 }
 object InternalTraceDoctorFirrtlAnnotation {
   def apply(a: TraceDoctorFirrtlAnnotation): InternalTraceDoctorFirrtlAnnotation = {
-    InternalTraceDoctorFirrtlAnnotation(a.target, a.clock, a.reset, a.label, a.description, a.coverGenerated)
+    InternalTraceDoctorFirrtlAnnotation(a.target, a.clock, a.reset, a.label, a.description, a.coverGenerated, a.numBits, a.power)
   }
 }
 
