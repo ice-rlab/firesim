@@ -7,6 +7,8 @@
 VERILATOR_CXXOPTS ?= -O2
 VERILATOR_MAKEFLAGS ?= -j8 VM_PARALLEL_BUILDS=1
 
+EXTRA_VERILATOR_FLAGS += -Wno-WIDTHEXPAND # For some cases in Gemmini, 
+
 verilator = $(GENERATED_DIR)/V$(DESIGN)
 verilator_debug = $(GENERATED_DIR)/V$(DESIGN)-debug
 
@@ -16,13 +18,14 @@ $(verilator) $(verilator_debug): export LDFLAGS := $(LDFLAGS) $(common_ld_flags)
 verilator_driver_deps := $(header) $(DRIVER_CC) $(DRIVER_H) $(midas_cc) $(midas_h) $(simulator_verilog)
 
 define make_verilator
+        $(info >>> ENTERING verilator Makefile in $(CURDIR))
         $(MAKE) -C $(simif_dir) $(VERILATOR_MAKEFLAGS) $(1) \
                 PLATFORM=$(PLATFORM) \
                 DRIVER_NAME=$(DESIGN) \
                 GEN_FILE_BASENAME=$(BASE_FILE_NAME) \
                 GEN_DIR=$(GENERATED_DIR) \
                 DRIVER="$(DRIVER_CC)" \
-		VERILATOR_FLAGS="$(EXTRA_VERILATOR_FLAGS)"
+	VERILATOR_FLAGS="$(EXTRA_VERILATOR_FLAGS)"
 endef
 
 $(verilator): $(verilator_driver_deps)
