@@ -782,6 +782,7 @@ class RuntimeBuildRecipeConfig(RuntimeHWConfig):
         build_recipe_dict: Dict[str, Any],
         build_recipes_config_file: str,
         default_metasim_host_sim: str,
+        metasimulation_wave_format: str,
         metasimulation_only_plusargs: str,
         metasimulation_only_vcs_plusargs: str,
     ) -> None:
@@ -824,6 +825,7 @@ class RuntimeBuildRecipeConfig(RuntimeHWConfig):
         # note whether we've built a copy of the simulation driver for this hwconf
         self.driver_built = False
         self.metasim_host_simulator = default_metasim_host_sim
+        self.metasimulation_wave_format = metasimulation_wave_format
 
         # currently only f1 metasims supported
         self.platform = build_recipe_dict.get("PLATFORM", "f1")
@@ -884,7 +886,10 @@ class RuntimeBuildRecipeConfig(RuntimeHWConfig):
         if self.metasim_host_simulator == "verilator-debug":
             full_extra_plusargs += " +waveformfile=metasim_waveform.vcd "
         if self.metasim_host_simulator == "vcs-debug":
-            full_extra_plusargs += " +fsdbfile=metasim_waveform.fsdb "
+            if self.metasimulation_wave_format == "vpd":
+                full_extra_plusargs += " +vcdplusfile=metasim_waveform.vpd "
+            elif self.metasimulation_wave_format == "fsdb":
+                full_extra_plusargs += " +fsdbfile=metasim_waveform.fsdb "
         # TODO: spike-dasm support
         full_extra_args = " 2> metasim_stderr.out " + extra_args
         return super(RuntimeBuildRecipeConfig, self).get_boot_simulation_command(
@@ -951,6 +956,7 @@ class RuntimeBuildRecipes(RuntimeHWDB):
         self,
         build_recipes_config_file: str,
         metasim_host_simulator: str,
+        metasimulation_wave_format: str,
         metasimulation_only_plusargs: str,
         metasimulation_only_vcs_plusargs: str,
     ) -> None:
@@ -969,6 +975,7 @@ class RuntimeBuildRecipes(RuntimeHWDB):
                 v,
                 build_recipes_config_file,
                 metasim_host_simulator,
+                metasimulation_wave_format,
                 metasimulation_only_plusargs,
                 metasimulation_only_vcs_plusargs,
             )
@@ -999,30 +1006,44 @@ class InnerRuntimeConfiguration:
     terminateoncompletion: bool
     metasimulation_enabled: bool
     metasimulation_host_simulator: str
+    metasimulation_host_simulator: str
     metasimulation_only_plusargs: str
     metasimulation_only_vcs_plusargs: str
     default_plusarg_passthrough: str
 
-    def __init__(self, runtimeconfigfile: str, configoverridedata: str) -> None:
+    def __init__(self, runtimeconfigfile: str, configoverridedatalist: List[str]) -> None:
 
+        
+        rootLogger.warning(configoverridedatalist)
         runtime_configfile = None
         with open(runtimeconfigfile, "r") as yaml_file:
             runtime_configfile = yaml.safe_load(yaml_file)
 
         runtime_dict = runtime_configfile
 
+        
+        visited = []
         # override parts of the runtime conf if specified
-        if configoverridedata != "":
-            ## handle overriding part of the runtime conf
-            configoverrideval = configoverridedata.split()
-            overridesection = configoverrideval[0]
-            overridefield = configoverrideval[1]
-            overridevalue = configoverrideval[2]
-            rootLogger.warning("Overriding part of the runtime config with: ")
-            rootLogger.warning("""[{}]""".format(overridesection))
-            rootLogger.warning(overridefield + "=" + overridevalue)
-            runtime_dict[overridesection][overridefield] = overridevalue
-
+        for configoverridedata in configoverridedatalist:
+            if configoverridedata != "":
+                ## handle overriding part of the runtime conf
+                configoverrideval = configoverridedata[0].split()
+                overridesection = configoverrideval[0]
+                overridefield = configoverrideval[1]
+                overridevalue = configoverrideval[2]
+                
+                rootLogger.warning("Overriding part of the runtime config with: ")
+                rootLogger.warning("""[{}]""".format(overridesection))
+                rootLogger.warning(overridefield + "=" + overridevalue)
+                if (overridesection, overridefield) not in visited:
+                    runtime_dict[overridesection][overridefield] = overridevalue
+                else:
+                    runtime_dict[overridesection][overridefield] = runtime_dict[overridesection][overridefield] + " " + overridevalue
+                visited.append((overridesection, overridefield))
+                
+        for key, value in runtime_dict.items():
+            rootLogger.warning(f"Runtime config: {key} = {value}")
+        
         def dict_assert(key_check, dict_name):
             assert (
                 key_check in dict_name
@@ -1036,6 +1057,12 @@ class InnerRuntimeConfiguration:
         self.metasimulation_host_simulator = metasim_dict[
             "metasimulation_host_simulator"
         ]
+        if "metasimulation_wave_format" in metasim_dict:
+            self.metasimulation_wave_format = metasim_dict[
+                "metasimulation_wave_format"
+            ]
+        else:
+            self.metasimulation_wave_format = "vpd"
         dict_assert("metasimulation_only_plusargs", metasim_dict)
         self.metasimulation_only_plusargs = metasim_dict["metasimulation_only_plusargs"]
         dict_assert("metasimulation_only_vcs_plusargs", metasim_dict)
@@ -1135,6 +1162,7 @@ class RuntimeConfig:
         self.runtime_build_recipes = RuntimeBuildRecipes(
             args.buildrecipesconfigfile,
             self.innerconf.metasimulation_host_simulator,
+            self.innerconf.metasimulation_wave_format,
             self.innerconf.metasimulation_only_plusargs,
             self.innerconf.metasimulation_only_vcs_plusargs,
         )

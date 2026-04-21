@@ -1435,7 +1435,7 @@ class XilinxVCU118InstanceDeployManager(InstanceDeployManager):
                 # TODO: is hardcoded cap 0x1 correct?
                 # TODO: is "Partial Reconfig Clear File" useful (see xvsecctl help)?
                 bdfs = [
-                    {"busno": "0x" + i[:2], "devno": "0x" + i[3:5], "capno": "0x1"}
+                    {"busno": "0x" + i[:2], "devno": "0x" + i[3:5], "capno": "0x0"}
                     for i in collect.splitlines()
                     if len(i.strip()) >= 0
                 ]
