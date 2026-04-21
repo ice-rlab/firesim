@@ -407,9 +407,9 @@ def construct_firesim_argparser() -> argparse.ArgumentParser:
     parser.add_argument('-a', '--hwdbconfigfile', type=str,
                         help='Optional custom HW database config file. Defaults to config_hwdb.yaml.',
                         default='config_hwdb.yaml')
-    parser.add_argument('-x', '--overrideconfigdata', type=str,
+    parser.add_argument('-x', '--overrideconfigdata',
                         help='Override a single value from one of the the RUNTIME e.g.: --overrideconfigdata "target-config link-latency 6405".',
-                        default="")
+                        default=[], action='append', nargs="+")
     parser.add_argument('-f', '--terminatesomef116', type=int,
                         help='DEPRECATED. Use --terminatesome=f1.16xlarge:count instead. Will be removed in the next major version of FireSim (1.15.X). Old help message: Only used by terminaterunfarm. Terminates this many of the previously launched f1.16xlarges.',
                         default=-1)

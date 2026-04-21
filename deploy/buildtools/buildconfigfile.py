@@ -64,7 +64,39 @@ class BuildConfigFile:
         global_build_config_file = None
         with open(args.buildconfigfile, "r") as yaml_file:
             global_build_config_file = yaml.safe_load(yaml_file)
-
+        
+        
+        rootLogger.warning(f"{args}")
+        rootLogger.warning(f"Global build config file: {global_build_config_file}")
+        
+        visited = []
+        for configoverridedata in args.overrideconfigdata:
+            if configoverridedata != "":
+                ## handle overriding part of the runtime conf
+                configoverrideval = configoverridedata[0].split()
+                overridesection = configoverrideval[0]
+                if len(configoverrideval) > 2:
+                    overridefield = configoverrideval[1]
+                    overridevalue = configoverrideval[2]
+                
+                    rootLogger.warning("Overriding part of the runtime config with: ")
+                    rootLogger.warning("""[{}]""".format(overridesection))
+                    rootLogger.warning(overridefield + "=" + overridevalue)
+                    if (overridesection, overridefield) not in visited:
+                        global_build_config_file[overridesection][overridefield] = overridevalue
+                    else:
+                        global_build_config_file[overridesection][overridefield] = global_build_config_file[overridesection][overridefield] + " " + overridevalue
+                    visited.append((overridesection, overridefield))
+                else:
+                    overridevalue = configoverrideval[1].split("-")[1:]
+                    rootLogger.warning("Overriding part of the runtime config with: ")
+                    rootLogger.warning("""[{}]""".format(overridesection))
+                    rootLogger.warning(overridevalue)
+                    global_build_config_file[overridesection] = overridevalue
+            
+            
+        
+        rootLogger.warning(f"Global build config file: {global_build_config_file}")
         # aws specific options
         self.agfistoshare = global_build_config_file["agfis_to_share"]
         swa_dict = global_build_config_file["share_with_accounts"]
