@@ -59,7 +59,7 @@ class BuildConfig:
         TARGET_PROJECT_MAKEFRAG: Target project makefrag location to build.
         DESIGN: Design to build.
         TARGET_CONFIG: Target config to build.
-        deploy_quintuplet: Deploy quintuplet override.
+        deploy_sextuplet: Deploy sextuplet override.
         launch_time: Launch time of the manager.
         PLATFORM_CONFIG: Platform config to build.
         fpga_frequency: Frequency for the FPGA build.
@@ -74,13 +74,14 @@ class BuildConfig:
     TARGET_PROJECT_MAKEFRAG: Optional[str]
     DESIGN: str
     TARGET_CONFIG: str
-    deploy_quintuplet: Optional[str]
+    deploy_sextuplet: Optional[str]
     frequency: float
     strategy: BuildStrategy
     launch_time: str
     PLATFORM_CONFIG: str
     post_build_hook: str
     bitbuilder: BitBuilder
+    circt_flags : str
 
     def __init__(
         self,
@@ -119,28 +120,48 @@ class BuildConfig:
         self.TARGET_CONFIG = recipe_config_dict["TARGET_CONFIG"]
 
         if (
-            "deploy_triplet" in recipe_config_dict.keys()
-            and "deploy_quintuplet" in recipe_config_dict.keys()
+            "deploy_triplet" in recipe_config_dict
+            and ("deploy_quintuplet" in recipe_config_dict or "deploy_sextuplet" in recipe_config_dict)
         ):
             rootLogger.error(
-                "Cannot have both 'deploy_quintuplet' and 'deploy_triplet' in build config. Define only 'deploy_quintuplet'."
+                "Cannot have both 'deploy_triplet' and ('deploy_quintuplet' or 'deploy_sextuplet') in build config. "
+                "Define only 'deploy_sextuplet' (preferred)."
             )
             sys.exit(1)
-        elif "deploy_triplet" in recipe_config_dict.keys():
+
+        if "deploy_quintuplet" in recipe_config_dict and "deploy_sextuplet" in recipe_config_dict:
+            rootLogger.error(
+                "Cannot have both 'deploy_quintuplet' and 'deploy_sextuplet' in build config. "
+                "Define only 'deploy_sextuplet'."
+            )
+            sys.exit(1)
+
+        if "deploy_quintuplet" in recipe_config_dict:
             rootLogger.warning(
-                "Please rename your 'deploy_triplet' key in your build config to 'deploy_quintuplet'. Support for 'deploy_triplet' will be removed in the future."
+                "Please rename your 'deploy_quintuplet' key in your build config to 'deploy_sextuplet'. "
+                "Support for 'deploy_quintuplet' will be removed in the future."
             )
 
-        self.deploy_quintuplet = recipe_config_dict.get("deploy_quintuplet")
-        if self.deploy_quintuplet is None:
-            # temporarily support backwards compat
-            self.deploy_quintuplet = recipe_config_dict.get("deploy_triplet")
+        if "deploy_triplet" in recipe_config_dict:
+            rootLogger.warning(
+                "Please rename your 'deploy_triplet' key in your build config to 'deploy_sextuplet'. "
+                "Support for 'deploy_triplet' will be removed in the future."
+            )
 
-        if (
-            self.deploy_quintuplet is not None
-            and len(self.deploy_quintuplet.split("-")) == 3
-        ):
-            self.deploy_quintuplet = "f1-firesim-" + self.deploy_quintuplet
+        self.deploy_sextuplet = recipe_config_dict.get("deploy_sextuplet")
+        if self.deploy_sextuplet is None:
+            # backwards compat: quintuplet, then triplet
+            self.deploy_sextuplet = recipe_config_dict.get("deploy_quintuplet")
+        if self.deploy_sextuplet is None:
+            self.deploy_sextuplet = recipe_config_dict.get("deploy_triplet")
+
+
+        if self.deploy_sextuplet is not None and len(self.deploy_sextuplet.split("-")) == 3:
+            self.deploy_sextuplet = f"{self.PLATFORM}-{self.TARGET_PROJECT}-" + self.deploy_sextuplet
+
+
+        if self.deploy_sextuplet is not None and len(self.deploy_sextuplet.split("-")) == 5:
+            self.deploy_sextuplet = self.deploy_sextuplet + f"-{self.name}"
 
         self.launch_time = launch_time
 
@@ -154,6 +175,12 @@ class BuildConfig:
         self.build_strategy = BuildStrategy.from_string(
             bitstream_build_args["build_strategy"]
         )
+        
+        # optional circt compiler flags
+        self.circt_flags = recipe_config_dict.get("circt_flags", "")
+        self.circt_flags = " ".join(self.get_circt_flags().split())  # sanitize whitespace in circt flags
+
+        rootLogger.info(f"CIRCT flags: {self.circt_flags}")
 
         # retrieve the bitbuilder section
         bitbuilder_conf_dict = None
@@ -198,31 +225,39 @@ class BuildConfig:
 
     def get_effective_deploy_triplet(self) -> str:
         """Get the effective deploy triplet, i.e. the triplet version of
-        get_effective_deploy_quintuplet().
+        get_effective_deploy_sextuplet().
 
         Returns:
             Effective deploy triplet
         """
-        return "-".join(self.get_effective_deploy_quintuplet().split("-")[2:])
+        return "-".join(self.get_effective_deploy_sextuplet().split("-")[2:])
 
-    def get_chisel_quintuplet(self) -> str:
-        """Get the unique build-specific '-' deliminated quintuplet.
+    def get_chisel_sextuplet(self) -> str:
+        """Get the unique build-specific '-' deliminated sextuplet.
 
         Returns:
-            Chisel quintuplet
+            Chisel sextuplet
         """
         return f"{self.PLATFORM}-{self.TARGET_PROJECT}-{self.DESIGN}-{self.TARGET_CONFIG}-{self.PLATFORM_CONFIG}"
 
-    def get_effective_deploy_quintuplet(self) -> str:
-        """Get the effective deploy quintuplet, i.e. the value specified in
-        deploy_quintuplet if specified, otherwise just get_chisel_quintuplet().
+    def get_effective_deploy_sextuplet(self) -> str:
+        """Get the effective deploy sextuplet, i.e. the value specified in
+        deploy_sextuplet if specified, otherwise just get_chisel_sextuplet().
 
         Returns:
-            Effective deploy quintuplet
+            Effective deploy sextuplet
         """
-        if self.deploy_quintuplet:
-            return self.deploy_quintuplet
-        return self.get_chisel_quintuplet()
+        if self.deploy_sextuplet:
+            return self.deploy_sextuplet
+        return self.get_chisel_sextuplet()
+    
+    def get_circt_flags(self) -> str:
+        """Get the circt compiler flags specified in the build config.
+
+        Returns:
+            CIRCT compiler flags string.
+        """
+        return self.circt_flags
 
     def get_deploy_makefrag(self) -> Optional[str]:
         return self.TARGET_PROJECT_MAKEFRAG
@@ -260,7 +295,8 @@ class BuildConfig:
         Returns:
             Fully specified make command.
         """
-        return f"""make PLATFORM={self.PLATFORM} TARGET_PROJECT={self.TARGET_PROJECT} {extra_target_project_make_args(self.TARGET_PROJECT, self.TARGET_PROJECT_MAKEFRAG, deploy_dir)} DESIGN={self.DESIGN} TARGET_CONFIG={self.TARGET_CONFIG} PLATFORM_CONFIG={self.PLATFORM_CONFIG} {recipe}"""
+        rootLogger.warning(f"""MAKING RECIPE: make PLATFORM={self.PLATFORM} TARGET_PROJECT={self.TARGET_PROJECT} {extra_target_project_make_args(self.TARGET_PROJECT, self.TARGET_PROJECT_MAKEFRAG, deploy_dir)} DESIGN={self.DESIGN} TARGET_CONFIG={self.TARGET_CONFIG} PLATFORM_CONFIG={self.PLATFORM_CONFIG} {recipe}""")
+        return f"""make PLATFORM={self.PLATFORM} TARGET_PROJECT={self.TARGET_PROJECT} {extra_target_project_make_args(self.TARGET_PROJECT, self.TARGET_PROJECT_MAKEFRAG, deploy_dir)} DESIGN={self.DESIGN} TARGET_CONFIG={self.TARGET_CONFIG} PLATFORM_CONFIG={self.PLATFORM_CONFIG} CIRCT_FLAGS={self.get_circt_flags()} {recipe}"""
 
     def __repr__(self) -> str:
         return f"< {type(self)}(name={self.name!r}, build_config_file={self.build_config_file!r}) @{id(self)} >"

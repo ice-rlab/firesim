@@ -79,7 +79,7 @@ class AbstractPipeToPipeConfig:
         runtime_conf_path = os.path.join(
             "../sim/generated-src",
             hwconfig.get_platform(),
-            hwconfig.get_deployquintuplet_for_config(),
+            hwconfig.get_deploysextuplet_for_config(),
         )
         rootLogger.info(f"runtime_conf_path {runtime_conf_path}")
         return os.path.join(runtime_conf_path, GENERATED_PARTITION_PARAMS_FILE)

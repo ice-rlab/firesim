@@ -802,11 +802,11 @@ class FireSimTopologyWithPasses:
         self, hwcfg: RuntimeHWConfig, bridge_idx: int
     ) -> Optional[int]:
         platform = hwcfg.get_platform()
-        quintuplet = hwcfg.get_deployquintuplet_for_config()
+        sextuplet = hwcfg.get_deploysextuplet_for_config()
         rootLogger.info(
-            """neighbor platform: {} quintuplet: {}""".format(platform, quintuplet)
+            """neighbor platform: {} sextuplet: {}""".format(platform, sextuplet)
         )
-        driver_path = os.path.join("../sim/generated-src", platform, quintuplet)
+        driver_path = os.path.join("../sim/generated-src", platform, sextuplet)
         p2p_config_file = os.path.join(
             driver_path, "FireSim-generated.peer2peer.const.yaml"
         )
