@@ -1174,6 +1174,8 @@ class XilinxAlveoInstanceDeployManager(InstanceDeployManager):
     def infrasetup_instance(self, uridir: str) -> None:
         """Handle infrastructure setup for this platform."""
         metasim_enabled = self.parent_node.metasimulation_enabled
+        self.instance_logger(f"""Infrasetup for Xilinx Alveo Platform""")
+
 
         if self.instance_assigned_simulations():
             # This is a sim-host node.
@@ -1271,7 +1273,7 @@ class XilinxAlveoInstanceDeployManager(InstanceDeployManager):
 
     def enumerate_fpgas(self, uridir: str) -> None:
         """Handle fpga setup for this platform."""
-
+        self.instance_logger(f"""Enumerating FPGAs for Xilinx Alveo Platform""")
         if self.instance_assigned_simulations():
             # This is a sim-host node.
 
@@ -1347,6 +1349,11 @@ class RHSResearchNitefuryIIInstanceDeployManager(XilinxAlveoInstanceDeployManage
     def __init__(self, parent_node: Inst) -> None:
         super().__init__(parent_node)
         self.PLATFORM_NAME = "rhsresearch_nitefury_ii"
+        
+class RHSResearchLitefuryInstanceDeployManager(XilinxAlveoInstanceDeployManager):
+    def __init__(self, parent_node: Inst) -> None:
+        super().__init__(parent_node)
+        self.PLATFORM_NAME = "rhsresearch_litefury"
 
 
 class XilinxVCU118InstanceDeployManager(InstanceDeployManager):
@@ -1454,6 +1461,8 @@ class XilinxVCU118InstanceDeployManager(InstanceDeployManager):
 
     def infrasetup_instance(self, uridir: str) -> None:
         """Handle infrastructure setup for this platform."""
+        self.instance_logger(f"""Infrasetup for Xilinx VCU118""")
+
         if self.instance_assigned_simulations():
             # This is a sim-host node.
 
