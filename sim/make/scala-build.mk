@@ -33,7 +33,7 @@
 JAVA_HEAP_SIZE ?= 16G
 # Disable the SBT supershell as interacts poorly with scalatest output and breaks
 # the runtime config generator.
-export JAVA_TOOL_OPTIONS ?= -Xmx$(JAVA_HEAP_SIZE) -Xss8M -Djava.io.tmpdir=$(firesim_base_dir)/.java_tmp
+export JAVA_TOOL_OPTIONS ?= -Xmx$(JAVA_HEAP_SIZE) -Xss32M -Djava.io.tmpdir=$(firesim_base_dir)/.java_tmp
 export SBT_OPTS ?= -Dsbt.ivy.home=$(firesim_base_dir)/.ivy2 -Dsbt.global.base=$(firesim_base_dir)/.sbt -Dsbt.boot.directory=$(firesim_base_dir)/.sbt/boot/ -Dsbt.color=always -Dsbt.supershell=false -Dsbt.server.forcestart=true
 SBT ?= java -jar $(firesim_base_dir)/sbt-launch.jar $(SBT_OPTS)
 
@@ -116,9 +116,24 @@ firesim_test_srcs = \
 	$(call fs_lookup_srcs_by_multiple_type, $(firesim_source_dirs), 'test/resources', $(VLOG_EXT))
 
 FIRESIM_MAIN_CP := $(BUILD_DIR)/firesim-main.jar
+
+#### Hacky way to override the firrtl with our own custom fork with custom parser
+####################################################################################
+FIRRTL_PUBLISH_DIR := $(firesim_base_dir)/.ivy2
+FIRRTL_PUBLISH_CP := $(FIRRTL_PUBLISH_DIR)/local/edu.berkeley.cs/firrtl_2.13/1.6.0-matt-SNAPSHOT/jars/firrtl_2.13.jar
+
+$(FIRRTL_PUBLISH_CP):
+	@echo "Building FIRRTL: $(FIRRTL_PUBLISH_CP)"
+	@mkdir -p $(FIRRTL_PUBLISH_DIR)
+	@echo "cd $(firesim_base_dir)/firrtl && env SBT_OPTS=-Dsbt.ivy.home=$(firesim_base_dir)/.ivy2 sbt '++ 2.13.10!' 'set version := \"1.6.0-matt-SNAPSHOT\"' publishLocal"
+	@cd $(firesim_base_dir)/firrtl && \
+	  env SBT_OPTS=-Dsbt.ivy.home=$(firesim_base_dir)/.ivy2 \
+	  sbt '++ 2.13.10!' 'set version := "1.6.0-matt-SNAPSHOT"' publishLocal
+####################################################################################
+
 # if *_CLASSPATH is a true java classpath, it can be colon-delimited list of paths (on *nix)
 FIRESIM_MAIN_CP_TARGETS := $(subst :, ,$(FIRESIM_MAIN_CP))
-$(FIRESIM_MAIN_CP): $(SCALA_BUILDTOOL_DEPS) $(firesim_main_srcs) $(firesim_test_srcs)
+$(FIRESIM_MAIN_CP): $(FIRRTL_PUBLISH_CP) $(SCALA_BUILDTOOL_DEPS) $(firesim_main_srcs) $(firesim_test_srcs)
 	@mkdir -p $(@D)
 	$(call run_sbt_assembly,$(firesim_base_dir),$(FIRESIM_SBT_PROJECT),$(FIRESIM_MAIN_CP))
 

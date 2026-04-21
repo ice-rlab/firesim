@@ -47,6 +47,41 @@ OUTPUT_DIR ?= $(firesim_base_dir)/output/$(PLATFORM)/$(name_quintuplet)
 FIRRTL_FILE := $(GENERATED_DIR)/$(long_name).fir
 ANNO_FILE := $(GENERATED_DIR)/$(long_name).anno.json
 
+
+
+FIRRTL_FILE_CIRCT_IMPORT_MLIR ?= $(GENERATED_DIR)/$(long_name).firrtl_import.mlir
+CIRCT_IMPORT_FIRRTL_LOG_FILE  ?= $(FIRRTL_FILE_CIRCT_IMPORT_MLIR).log
+
+
+CIRCT_OPT_FLAGS_FILE := $(GENERATED_DIR)/$(long_name).circt-flags
+CIRCT_COMPILER_FLAGS_FILE := $(GENERATED_DIR)/$(long_name).compiler_flags
+
+CIRCT_DEBUG_DIR := $(GENERATED_DIR)/circt_debug
+
+FIRRTL_FILE_CIRCT_OPT_MLIR    ?= $(GENERATED_DIR)/$(long_name).firrtl_opt.mlir
+CIRCT_OPT_MLIR_LOG_FILE       ?= $(FIRRTL_FILE_CIRCT_OPT_MLIR).log
+
+FIRRTL_FILE_POST_CIRCT := $(GENERATED_DIR)/$(long_name).post_circt.fir
+FIRRTL_FILE_POST_CIRCT_LOG_FILE ?= $(GENERATED_DIR)/$(long_name).circt-translate.log
+
+
+# LO_FIRRTL_FILE_POST_CIRCT := $(GENERATED_DIR)/$(long_name).post_circt.lo.fir
+
+# LO_CIRCT_ANNO_FILE := $(GENERATED_DIR)/$(long_name).post_circt.lo.anno.json
+
+
+
+CIRCT_ANNO_FILE := $(GENERATED_DIR)/$(long_name).post_circt.anno.json
+# CIRCT_OPT_ARGS ?=  -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(perf-insert-counter{targets=Rocket:wb_valid})),perf-emit-autocounter{file=$(CIRCT_ANNO_FILE)})' --debug-only=perf-insert-counter
+CIRCT_OPT_ARGS ?=
+CIRCT_OPT_FLAG_FILE := $(GENERATED_DIR)/$(long_name).circt_opt_flags.txt
+
+
+CIRCT_FINAL_ANNO_FILE := $(GENERATED_DIR)/$(long_name)_final.anno.json
+
+
+
+
 ################################################################################
 # Set up a fully-qualified classpath for the target.
 ################################################################################

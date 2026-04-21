@@ -22,11 +22,14 @@ compile: $(simulator_verilog)
 # Disable FIRRTL 1.4 deduplication because it creates multiple failures
 # Run the 1.3 version instead (checked-in). If dedup must be completely disabled,
 # pass --no-legacy-dedup as well
-$(simulator_verilog) $(simulator_xdc) $(header) $(fame_annos) &: $(FIRRTL_FILE) $(ANNO_FILE) $(FIRESIM_MAIN_CP)
+
+
+$(simulator_verilog) $(simulator_xdc) $(header) $(fame_annos) &: $(FIRRTL_FILE_POST_CIRCT) $(CIRCT_FINAL_ANNO_FILE) $(FIRESIM_MAIN_CP)
+	$(info >>> ENTERING GoldenGate $(FIRRTL_FILE_POST_CIRCT) --> $(simulator_verilog))
 	$(call run_jar_scala_main,$(firesim_base_dir),$(FIRESIM_MAIN_CP),midas.stage.GoldenGateMain,\
-		-i $(FIRRTL_FILE) \
+		-i $(FIRRTL_FILE_POST_CIRCT) \
 		-td $(GENERATED_DIR) \
-		-faf $(ANNO_FILE) \
+		-faf $(CIRCT_FINAL_ANNO_FILE) \
 		-ggcp $(PLATFORM_CONFIG_PACKAGE) \
 		-ggcs $(PLATFORM_CONFIG) \
 		--output-filename-base $(BASE_FILE_NAME) \
