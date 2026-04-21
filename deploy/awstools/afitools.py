@@ -113,22 +113,22 @@ def share_agfi_in_all_regions(agfi_id, useridlist):
 
 
 def firesim_tags_to_description(
-    build_quintuplet,
-    deploy_quintuplet,
+    build_sextuplet,
+    deploy_sextuplet,
     build_triplet,
     deploy_triplet,
     commit,
     build_makefrag,
-    deploy_makefrag,
+    deploy_makefrag
 ):
     """Serialize the tags we want to set for storage in the AGFI description"""
     # note: the serialized rep still includes "triplets" for future manager versions to be compatible with old agfis
-    return f"""firesim-buildquintuplet:{build_quintuplet},firesim-deployquintuplet:{deploy_quintuplet},firesim-buildtriplet:{build_triplet},firesim-deploytriplet:{deploy_triplet},firesim-commit:{commit},firesim-buildmakefrag:{build_makefrag},firesim-deploymakefrag:{deploy_makefrag}"""
+    return f"""firesim-buildsextuplet:{build_sextuplet},firesim-deploysextuplet:{deploy_sextuplet},firesim-buildtriplet:{build_triplet},firesim-deploytriplet:{deploy_triplet},firesim-commit:{commit},firesim-buildmakefrag:{build_makefrag},firesim-deploymakefrag:{deploy_makefrag}"""
 
 
 def firesim_description_to_tags(description):
     """Deserialize the tags we want to read from the AGFI description string.
-    Return dictionary of keys/vals [{build,deploy}quintuplet, {build,deploy}triplet, commit, {build,deploy}makefrag].
+    Return dictionary of keys/vals [{build,deploy}sextuplet, {build,deploy}triplet, commit, {build,deploy}makefrag].
     """
     returndict = dict()
     desc_split = description.split(",")
@@ -154,9 +154,9 @@ def get_firesim_tagval_for_agfi(agfi_id, tagkey):
     return get_firesim_tagval_for_afi(afi_id, tagkey)
 
 
-def get_firesim_deploy_quintuplet_for_agfi(agfi_id):
-    """Given an agfi_id, return the deploy_quintuplet."""
-    quin = get_firesim_tagval_for_agfi(agfi_id, "firesim-deployquintuplet")
+def get_firesim_deploy_sextuplet_for_agfi(agfi_id):
+    """Given an agfi_id, return the deploy_sextuplet."""
+    quin = get_firesim_tagval_for_agfi(agfi_id, "firesim-deploysextuplet")
     if quin is None:
         # for old AGFIs that use the old "triplet" key
         quin = get_firesim_tagval_for_agfi(agfi_id, "firesim-deploytriplet")

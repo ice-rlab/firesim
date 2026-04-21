@@ -36,7 +36,7 @@ $(f1): $(header) $(DRIVER_CC) $(DRIVER_H) $(midas_cc) $(midas_h)
 # note: $$'s are used to escape the $ when the define is 1st called (i.e. so $$(var) turns into $(var) later)
 # note: $$$$$$$$'s is used to create $$ORIGIN when run on the shell
 define built_within_conda_only_driver_compilation_rules
-$$($1): export CXXFLAGS := $$(CXXFLAGS) $$(common_cxx_flags) $$(DRIVER_CXXOPTS)
+$$($1): export CXXFLAGS := $$(CXXFLAGS) $$(common_cxx_flags) $$(DRIVER_CXXOPTS) -I$${CONDA_PREFIX}/include
 $$($1): export LDFLAGS := $$(LDFLAGS) $$(common_ld_flags) -Wl,-rpath='$$$$$$$$ORIGIN'
 $$($1): $$(header) $$(DRIVER_CC) $$(DRIVER_H) $$(midas_cc) $$(midas_h)
 	mkdir -p $$(OUTPUT_DIR)/build
