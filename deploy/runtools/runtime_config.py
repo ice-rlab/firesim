@@ -24,7 +24,7 @@ import json
 
 from awstools.awstools import aws_resource_names
 from awstools.afitools import (
-    get_firesim_deploy_quintuplet_for_agfi,
+    get_firesim_deploy_sextuplet_for_agfi,
     firesim_description_to_tags,
 )
 from runtools.firesim_topology_with_passes import FireSimTopologyWithPasses
@@ -148,7 +148,7 @@ class URIContainer:
             return (uri, destination)
 
         try:
-            downloadURI(uri, destination)
+            downloadURI(uri, destination)  
         except FileNotFoundError as e:
             raise Exception(f"{self.hwcfg_prop} path '{uri}' was not found")
 
@@ -188,7 +188,7 @@ class RuntimeHWConfig:
     """User-specified, URI path to bitstream tar file"""
     bitstream_tar: Optional[str]
 
-    deploy_quintuplet: Optional[str]
+    deploy_sextuplet: Optional[str]
     deploy_makefrag: Optional[str]
     customruntimeconfig: str
     # note whether we've built a copy of the simulation driver for this hwconf
@@ -200,6 +200,9 @@ class RuntimeHWConfig:
     driver_type_message: str
     """User-specified, URI path to driver tarball"""
     driver_tar: Optional[str]
+
+    """CIRCT compiler flags specified by build recipe."""
+    circt_flags : Optional[str]
 
     """ A list of URIContainer objects, one for each URI that is able to be specified """
     uri_list: list[URIContainer]
@@ -241,39 +244,39 @@ class RuntimeHWConfig:
 
         if (
             "deploy_triplet_override" in hwconfig_dict.keys()
-            and "deploy_quintuplet_override" in hwconfig_dict.keys()
+            and "deploy_sextuplet_override" in hwconfig_dict.keys()
         ):
             rootLogger.error(
-                "Cannot have both 'deploy_quintuplet_override' and 'deploy_triplet_override' in hwdb entry. Define only 'deploy_quintuplet_override'."
+                "Cannot have both 'deploy_sextuplet_override' and 'deploy_triplet_override' in hwdb entry. Define only 'deploy_sextuplet_override'."
             )
             sys.exit(1)
         elif "deploy_triplet_override" in hwconfig_dict.keys():
             rootLogger.warning(
-                "Please rename your 'deploy_triplet_override' key in your hwdb entry to 'deploy_quintuplet_override'. Support for 'deploy_triplet_override' will be removed in the future."
+                "Please rename your 'deploy_triplet_override' key in your hwdb entry to 'deploy_sextuplet_override'. Support for 'deploy_triplet_override' will be removed in the future."
             )
 
-        hwconfig_override_build_quintuplet = hwconfig_dict.get(
-            "deploy_quintuplet_override"
+        hwconfig_override_build_sextuplet = hwconfig_dict.get(
+            "deploy_sextuplet_override"
         )
-        if hwconfig_override_build_quintuplet is None:
+        if hwconfig_override_build_sextuplet is None:
             # temporary backwards compat for old key
-            hwconfig_override_build_quintuplet = hwconfig_dict.get(
+            hwconfig_override_build_sextuplet = hwconfig_dict.get(
                 "deploy_triplet_override"
             )
 
         if (
-            hwconfig_override_build_quintuplet is not None
-            and len(hwconfig_override_build_quintuplet.split("-")) == 3
+            hwconfig_override_build_sextuplet is not None
+            and len(hwconfig_override_build_sextuplet.split("-")) == 3
         ):
-            # convert old build_triplet into buildquintuplet
-            hwconfig_override_build_quintuplet = (
-                "f1-firesim-" + hwconfig_override_build_quintuplet
+            # convert old build_triplet into buildsextuplet
+            hwconfig_override_build_sextuplet = (
+                "f1-firesim-" + hwconfig_override_build_sextuplet
             )
 
-        self.deploy_quintuplet = hwconfig_override_build_quintuplet
-        if self.deploy_quintuplet is not None:
+        self.deploy_sextuplet = hwconfig_override_build_sextuplet
+        if self.deploy_sextuplet is not None:
             rootLogger.warning(
-                f"{name} is overriding a deploy quintuplet in your config_hwdb.yaml file. Make sure you understand why!"
+                f"{name} is overriding a deploy sextuplet in your config_hwdb.yaml file. Make sure you understand why!"
             )
 
         hwconfig_override_build_makefrag = hwconfig_dict.get("deploy_makefrag_override")
@@ -292,7 +295,7 @@ class RuntimeHWConfig:
 
     def get_deploytriplet_for_config(self) -> str:
         """Get the deploytriplet for this configuration."""
-        quin = self.get_deployquintuplet_for_config()
+        quin = self.get_deploysextuplet_for_config()
         return "-".join(quin.split("-")[2:])
 
     @classmethod
@@ -326,9 +329,9 @@ class RuntimeHWConfig:
         self.set_check(self.platform, platform, "platform")
         self.platform = platform
 
-    def set_deploy_quintuplet(self, deploy_quintuplet: str) -> None:
-        self.set_check(self.deploy_quintuplet, deploy_quintuplet, "deploy_quintuplet")
-        self.deploy_quintuplet = deploy_quintuplet
+    def set_deploy_sextuplet(self, deploy_sextuplet: str) -> None:
+        self.set_check(self.deploy_sextuplet, deploy_sextuplet, "deploy_sextuplet")
+        self.deploy_sextuplet = deploy_sextuplet
 
     def set_deploy_makefrag(self, deploy_makefrag: Optional[str]) -> None:
         if self.deploy_makefrag is not None:
@@ -337,27 +340,34 @@ class RuntimeHWConfig:
         # otherwise, you can override from deploy_makefrag (which should come from metadata)
         self.deploy_makefrag = deploy_makefrag
 
-    def get_deployquintuplet_for_config(self) -> str:
-        """Get the deployquintuplet for this configuration. This memoizes the request
+    def get_circt_flags(self) -> str:
+    
+        return self.circt_flags if self.circt_flags is not None else ""
+    def set_circt_flags(self, circt_flags : str):
+        self.circt_flags = circt_flags
+    
+    def get_deploysextuplet_for_config(self) -> str:
+        """Get the deploysextuplet for this configuration. This memoizes the request
         to the AWS AGFI API."""
-        rootLogger.debug(
-            f"get_deployquintuplet_for_config {self.deploy_quintuplet} {self.get_platform}"
+        rootLogger.info(
+            f"get_deploysextuplet_for_config {self.deploy_sextuplet} {self.get_platform}"
         )
-        if self.deploy_quintuplet is not None:
-            return self.deploy_quintuplet
+        if self.deploy_sextuplet is not None:
+            rootLogger.info("Already set the self.deploy_sextuplet")
+            return self.deploy_sextuplet
 
         if self.get_platform() == "f1":
             rootLogger.debug(
-                "Setting deployquintuplet by querying the AGFI's description."
+                "Setting deploysextuplet by querying the AGFI's description."
             )
-            self.deploy_quintuplet = get_firesim_deploy_quintuplet_for_agfi(self.agfi)
+            self.deploy_sextuplet = get_firesim_deploy_sextuplet_for_agfi(self.agfi)
         else:
-            assert False, "Unable to obtain deploy_quintuplet"
+            assert False, "Unable to obtain deploy_sextuplet"
 
-        return self.deploy_quintuplet
+        return self.deploy_sextuplet
 
-    def get_deployquintuplet_pieces_for_config(self) -> List[str]:
-        return self.get_deployquintuplet_for_config().split("-")
+    def get_deploysextuplet_pieces_for_config(self) -> List[str]:
+        return self.get_deploysextuplet_for_config().split("-")
 
     def get_deploymakefrag_for_config(self) -> Optional[str]:
         if self.deploy_makefrag:
@@ -374,7 +384,7 @@ class RuntimeHWConfig:
 
     def get_design_name(self) -> str:
         """Returns the name used to prefix MIDAS-emitted files. (The DESIGN make var)"""
-        return self.get_deployquintuplet_pieces_for_config()[2]
+        return self.get_deploysextuplet_pieces_for_config()[2]
 
     def get_local_driver_binaryname(self) -> str:
         """Get the name of the driver binary."""
@@ -388,14 +398,14 @@ class RuntimeHWConfig:
         """Get the relative local directory that contains the driver used to
         run this sim."""
         rootLogger.info(
-            f"get_local_driver_dir {self.get_deployquintuplet_for_config()}"
+            f"get_local_driver_dir {self.get_deploysextuplet_for_config()}"
         )
         return (
             self.local_driver_base_dir
             + "/"
             + self.get_platform()
             + "/"
-            + self.get_deployquintuplet_for_config()
+            + self.get_deploysextuplet_for_config()
             + "/"
         )
 
@@ -403,16 +413,16 @@ class RuntimeHWConfig:
         """return relative local path of the driver used to run this sim."""
         return self.get_local_driver_dir() + self.get_local_driver_binaryname()
 
-    def local_quintuplet_path(self) -> Path:
-        """return the local path of the quintuplet folder. the tarball that is created goes inside this folder"""
-        quintuplet = self.get_deployquintuplet_for_config()
+    def local_sextuplet_path(self) -> Path:
+        """return the local path of the sextuplet folder. the tarball that is created goes inside this folder"""
+        sextuplet = self.get_deploysextuplet_for_config()
         return (
-            Path(get_deploy_dir()) / "../sim/output" / self.get_platform() / quintuplet
+            Path(get_deploy_dir()) / "../sim/output" / self.get_platform() / sextuplet
         )
 
     def local_tarball_path(self, name: str) -> Path:
         """return the local path of the tarball"""
-        return self.local_quintuplet_path() / name
+        return self.local_sextuplet_path() / name
 
     def get_local_runtimeconf_binaryname(self) -> str:
         """Get the name of the runtimeconf file."""
@@ -424,13 +434,13 @@ class RuntimeHWConfig:
         """return relative local path of the runtime conf used to run this sim."""
         if self.customruntimeconfig is None:
             return None
-        quintuplet = self.get_deployquintuplet_for_config()
+        sextuplet = self.get_deploysextuplet_for_config()
         drivers_software_base = (
             LOCAL_DRIVERS_GENERATED_SRC
             + "/"
             + self.get_platform()
             + "/"
-            + quintuplet
+            + sextuplet
             + "/"
         )
         return CUSTOM_RUNTIMECONFS_BASE + self.customruntimeconfig
@@ -626,10 +636,11 @@ class RuntimeHWConfig:
                 ret.append(maybe_file)
         return ret
 
+
     def resolve_hwcfg_values(self, dir: str) -> None:
         # must be done after fetch_all_URIs
         # based on the platform, read the URI, fill out values
-
+        rootLogger.info(f"Resolving hwcfg values for {self}")
         if self.platform == "f1":
             return
         else:  # bitstream_tar platforms
@@ -644,6 +655,7 @@ class RuntimeHWConfig:
                     (uri, destination) = both
 
                 if uri == self.bitstream_tar and uri is not None:
+                    rootLogger.info(f"Resolving hwcfg values form container {container} with uri {uri} and destination {destination}")
                     # unpack destination value
                     temp_dir = f"{dir}/{URIContainer.hashed_name(uri)}-dir"
                     local(f"mkdir -p {temp_dir}")
@@ -653,28 +665,53 @@ class RuntimeHWConfig:
                     cap = local(f"cat {temp_dir}/*/metadata", capture=True)
                     metadata = firesim_description_to_tags(cap)
 
-                    self.set_platform(
-                        metadata["firesim-deployquintuplet"].split("-")[0]
+                    deploy = (
+                        metadata.get("firesim-deploysextuplet")
+                        or metadata.get("firesim-deployquintuplet")
                     )
-                    self.set_deploy_quintuplet(metadata["firesim-deployquintuplet"])
+
+                    if deploy is None:
+                        raise KeyError("metadata must contain firesim-deploysextuplet or firesim-deployquintuplet")
+
+                    self.set_platform(deploy.split("-")[0])
+                    self.set_deploy_sextuplet(deploy)
+                    
+                    # self.set_platform(
+                    #     metadata["firesim-deployquintuplet"].split("-")[0]
+                    # )
+                    # self.set_deploy_sextuplet(metadata["firesim-deployquintuplet"])
                     deploy_makefrag = metadata.get(
                         "firesim-deploymakefrag", "None"
                     )  # support old metadatas that don't have this
+                    
                     rootLogger.debug(f"Got {deploy_makefrag} from metadata")
                     self.set_deploy_makefrag(
                         deploy_makefrag if deploy_makefrag != "None" else None
                     )
+                    
+                    matches = list(Path(temp_dir).glob("*/circt_flags"))
+                    rootLogger.info(f"Looking for circt_flags file in {temp_dir}/*/circt_flags with matches {matches}")
+                    if matches:
+                        flags_cap = matches[0].read_text().strip()
+                        rootLogger.info(f"Got circt flags '{flags_cap}' from circt flag file")
+                        self.circt_flags = flags_cap if flags_cap else None
+                    else:
+                        self.circt_flags = None
+                        rootLogger.info("No circt_flags file found")
+
+                    rootLogger.info(f"Final circt flags set to '{self.circt_flags}'")
+
 
                     break
 
     def get_partition_fpga_cnt(self) -> int:
-        quintuplet_pieces = self.get_deployquintuplet_pieces_for_config()
-        target_split_fpga_cnt = quintuplet_pieces[5]
+        sextuplet_pieces = self.get_deploysextuplet_pieces_for_config()
+        target_split_fpga_cnt = sextuplet_pieces[5]
         return int(target_split_fpga_cnt)
 
     def get_partition_fpga_idx(self) -> int:
-        quintuplet_pieces = self.get_deployquintuplet_pieces_for_config()
-        target_split_fpga_idx = quintuplet_pieces[6]
+        sextuplet_pieces = self.get_deploysextuplet_pieces_for_config()
+        target_split_fpga_idx = sextuplet_pieces[6]
         if target_split_fpga_idx.isnumeric():
             return int(target_split_fpga_idx)
         else:
@@ -687,23 +724,45 @@ class RuntimeHWConfig:
             # we already built the driver at some point
             return
         # TODO there is a duplicate of this in runtools
-        quintuplet_pieces = self.get_deployquintuplet_pieces_for_config()
+        sextuplet_pieces = self.get_deploysextuplet_pieces_for_config()
         target_project_makefrag = self.get_deploymakefrag_for_config()
 
-        platform = quintuplet_pieces[0]
-        target_project = quintuplet_pieces[1]
-        design = quintuplet_pieces[2]
-        target_config = quintuplet_pieces[3]
-        platform_config = quintuplet_pieces[4]
+        platform = sextuplet_pieces[0]
+        target_project = sextuplet_pieces[1]
+        design = sextuplet_pieces[2]
+        target_config = sextuplet_pieces[3]
+        platform_config = sextuplet_pieces[4]
         rootLogger.info(
-            f"Building {self.driver_type_message} driver for {str(self.get_deployquintuplet_for_config())}"
+            f"Building {self.driver_type_message} driver for {str(self.get_deploysextuplet_for_config())}"
         )
+        
+        rootLogger.info(f"Using deploy makefrag: {str(target_project_makefrag)}")
+        rootLogger.info(f"Using sextuplet pieces: {str(sextuplet_pieces)}")
+        
+        rootLogger.info(f"{type(self)}")
+        rootLogger.info(f"{self.customruntimeconfig}")
+        rootLogger.info(f"{self.deploy_sextuplet}")
+        rootLogger.info(f"{self.agfi}")
+        rootLogger.info(f"{self.bitstream_tar}")
+        rootLogger.info(f"{self.circt_flags}")
 
+        rootLogger.info(f"Using circt flags: {str(self.get_circt_flags())}")
         deploy_dir = get_deploy_dir()
+        rootLogger.info(
+            f"THIS IS THE ACTUAL BUILD COMMAND HERE: "
+            f"make PLATFORM={self.get_platform()} "
+            f"TARGET_PROJECT={target_project} "
+            f"{extra_target_project_make_args(target_project, target_project_makefrag, deploy_dir)} "
+            f"DESIGN={design} "
+            f"TARGET_CONFIG={target_config} "
+            f"PLATFORM_CONFIG={platform_config} "
+            f"CIRCT_FLAGS={self.get_circt_flags()} "
+            f"{self.get_driver_build_target()}"
+        )
         with InfoStreamLogger("stdout"), prefix(f"cd {deploy_dir}/../"), prefix(
             create_export_string({"RISCV", "PATH", "LD_LIBRARY_PATH"})
         ), prefix("source sourceme-manager.sh --skip-ssh-setup"), prefix("cd sim/"):
-            driverbuildcommand = f"make PLATFORM={self.get_platform()} TARGET_PROJECT={target_project} {extra_target_project_make_args(target_project, target_project_makefrag, deploy_dir)} DESIGN={design} TARGET_CONFIG={target_config} PLATFORM_CONFIG={platform_config} {self.get_driver_build_target()}"
+            driverbuildcommand = f"make PLATFORM={self.get_platform()} TARGET_PROJECT={target_project} {extra_target_project_make_args(target_project, target_project_makefrag, deploy_dir)} DESIGN={design} TARGET_CONFIG={target_config} PLATFORM_CONFIG={platform_config} CIRCT_FLAGS={self.get_circt_flags()} {self.get_driver_build_target()}"
             buildresult = run(driverbuildcommand)
             self.handle_failure(
                 buildresult, "driver build", "firesim/sim", driverbuildcommand
@@ -742,10 +801,10 @@ class RuntimeHWConfig:
                     self.handle_failure(results, "local rsync", get_deploy_dir(), cmd)
 
             # This must be taken outside of a cd context
-            cmd = f"mkdir -p {self.local_quintuplet_path()}"
+            cmd = f"mkdir -p {self.local_sextuplet_path()}"
             results = run(cmd)
             self.handle_failure(results, "local mkdir", builddir, cmd)
-            absolute_tarball_path = self.local_quintuplet_path() / tarball_name
+            absolute_tarball_path = self.local_sextuplet_path() / tarball_name
 
             with InfoStreamLogger("stdout"), prefix(f"cd {builddir}"):
                 findcmd = 'find . -mindepth 1 -maxdepth 1 -printf "%P\n"'
@@ -763,9 +822,9 @@ class RuntimeHWConfig:
             self.tarball_built = True
 
     def __str__(self) -> str:
-        return """RuntimeHWConfig: {}\nDeployQuintuplet: {}\nDeployMakefrag: {}\nAGFI: {}\nBitstream tar: {}\nCustomRuntimeConf: {}""".format(
+        return """RuntimeHWConfig: {}\nDeploysextuplet: {}\nDeployMakefrag: {}\nAGFI: {}\nBitstream tar: {}\nCustomRuntimeConf: {}""".format(
             self.name,
-            self.deploy_quintuplet,
+            self.deploy_sextuplet,
             self.deploy_makefrag,
             self.agfi,
             self.bitstream_tar,
@@ -795,7 +854,7 @@ class RuntimeBuildRecipeConfig(RuntimeHWConfig):
 
         self.uri_list = []
 
-        self.deploy_quintuplet = (
+        self.deploy_sextuplet = (
             build_recipe_dict.get("PLATFORM", "f1")
             + "-"
             + build_recipe_dict.get("TARGET_PROJECT", "firesim")
@@ -805,8 +864,11 @@ class RuntimeBuildRecipeConfig(RuntimeHWConfig):
             + build_recipe_dict["TARGET_CONFIG"]
             + "-"
             + build_recipe_dict["PLATFORM_CONFIG"]
+            # + "-"
+            # + build_recipe_dict.get("CIRCT_FLAGS", "")
         )
-
+        self.circt_flags = build_recipe_dict.get("circt_flags", None)
+        self.circt_flags = " ".join(self.get_circt_flags().split())
         # resolve the path as an absolute path if set
         self.deploy_makefrag = build_recipe_dict.get("TARGET_PROJECT_MAKEFRAG")
         # TODO: rename this since this can either be the hwdb or the build recipes file (in metasim or normal fpga sim)
@@ -1243,6 +1305,7 @@ class RuntimeConfig:
         """directly called by top-level infrasetup command."""
         # set this to True if you want to use mock boto3 instances for testing
         # the manager.
+        rootLogger.info(">>> Infrasetup")
         use_mock_instances_for_testing = False
         self.firesim_topology_with_passes.infrasetup_passes(
             use_mock_instances_for_testing
