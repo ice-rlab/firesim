@@ -7,8 +7,8 @@
 VERILATOR_CXXOPTS ?= -O2
 VERILATOR_MAKEFLAGS ?= -j8 VM_PARALLEL_BUILDS=1
 
-EXTRA_VERILATOR_FLAGS += -Wno-WIDTHEXPAND # For some cases in Gemmini, 
 
+EXTRA_VERILATOR_FLAGS += -Wno-WIDTHEXPAND -Wno-WIDTHTRUNC # For some cases in Gemmini and CDPU
 verilator = $(GENERATED_DIR)/V$(DESIGN)
 verilator_debug = $(GENERATED_DIR)/V$(DESIGN)-debug
 
