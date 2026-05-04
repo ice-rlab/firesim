@@ -18,11 +18,18 @@ private[midas] class MidasTransforms extends Transform {
     val newAnnos      = midas.ConvertExternalToInternalAnnotations(state.annotations)
     val internalState = state.copy(annotations = newAnnos)
 
+    var idx = 2
+    def next(name: String) = {
+      val s = f"${idx}%02d-$name"
+      idx += 1
+      s
+    }
+
     // Optionally run if the GenerateMultiCycleRamModels parameter is set
     val p                        = internalState.annotations.collectFirst({ case midas.stage.phases.ConfigParametersAnnotation(p) => p }).get
     val optionalTargetTransforms =
       if (p(GenerateMultiCycleRamModels))
-        Seq(new fame.LabelSRAMModels, new ResolveAndCheck, new EmitFirrtl("post-wrap-sram-models.fir"))
+        Seq(new fame.LabelSRAMModels, new ResolveAndCheck, new EmitFirrtl(next("post-wrap-sram-models.fir")))
       else Seq()
 
     val partition = p(FireAxePartitionGlobalInfo).isDefined
@@ -33,23 +40,23 @@ private[midas] class MidasTransforms extends Transform {
       Seq(
         new CheckCombPathLength,
         new WrapAndGroupModulesToPartition,
-        new EmitFirrtl("post-wrap-and-group.fir"),
-        new fame.EmitFAMEAnnotations("post-wrap-and-group.json"),
+        new EmitFirrtl(next("post-wrap-and-group.fir")),
+        new fame.EmitFAMEAnnotations(next("post-wrap-and-group.json")),
         new ResolveAndCheck,
         new CheckCombLogic,
-        new fame.EmitFAMEAnnotations("post-check-comb.json"),
+        new fame.EmitFAMEAnnotations(next("post-check-comb.json")),
         new GenerateFireSimWrapper,
-        new EmitFirrtl("post-gen-firesim-wrapper.fir"),
-        new fame.EmitFAMEAnnotations("post-gen-firesim-wrapper.json"),
+        new EmitFirrtl(next("post-gen-firesim-wrapper.fir")),
+        new fame.EmitFAMEAnnotations(next("post-gen-firesim-wrapper.json")),
         new PrunedExtraModulesAndAddBridgeAnnos,
-        new EmitFirrtl("post-prune-extra.fir"),
-        new fame.EmitAllAnnotations("post-prune-extra.json"),
+        new EmitFirrtl(next("post-prune-extra.fir")),
+        new fame.EmitAllAnnotations(next("post-prune-extra.json")),
         new ResolveAndCheck,
         new ModifyTargetBoundaryForExtractPass,
-        new EmitFirrtl("post-modify-boundary.fir"),
-        new fame.EmitFAMEAnnotations("post-modify-boundary.json"),
+        new EmitFirrtl(next("post-modify-boundary.fir")),
+        new fame.EmitFAMEAnnotations(next("post-modify-boundary.json")),
         new ResolveAndCheck,
-        new EmitFirrtl("post-modify-boundary-and-resolve.fir"),
+        new EmitFirrtl(next("post-modify-boundary-and-resolve.fir")),
       )
     } else {
       Seq()
@@ -60,22 +67,22 @@ private[midas] class MidasTransforms extends Transform {
       Seq(
         new CheckCombPathLength,
         new WrapAndGroupModulesToPartition,
-        new EmitFirrtl("post-wrap-and-group.fir"),
-        new fame.EmitFAMEAnnotations("post-wrap-and-group.json"),
+        new EmitFirrtl(next("post-wrap-and-group.fir")),
+        new fame.EmitFAMEAnnotations(next("post-wrap-and-group.json")),
         new ResolveAndCheck,
         new CheckCombLogic,
-        new fame.EmitFAMEAnnotations("post-check-comb.json"),
+        new fame.EmitFAMEAnnotations(next("post-check-comb.json")),
         new GenerateCutBridgeInGroupedWrapper,
-        new EmitFirrtl("post-gen-cutbridge.fir"),
-        new fame.EmitFAMEAnnotations("post-gen-cutbridge.json"),
+        new EmitFirrtl(next("post-gen-cutbridge.fir")),
+        new fame.EmitFAMEAnnotations(next("post-gen-cutbridge.json")),
         new ResolveAndCheck,
         new ModifyTargetBoundaryForRemovePass,
-        new EmitFirrtl("post-modify-boundary.fir"),
-        new fame.EmitAllAnnotations("post-modify-boundary.json"),
+        new EmitFirrtl(next("post-modify-boundary.fir")),
+        new fame.EmitAllAnnotations(next("post-modify-boundary.json")),
         new PruneUnrelatedAnnoPass,
-        new fame.EmitAllAnnotations("post-prune.json"),
+        new fame.EmitAllAnnotations(next("post-prune.json")),
         new ResolveAndCheck,
-        new EmitFirrtl("post-modify-boundary-and-resolve.fir"),
+        new EmitFirrtl(next("post-modify-boundary-and-resolve.fir")),
       )
     } else {
       Seq()
@@ -89,23 +96,23 @@ private[midas] class MidasTransforms extends Transform {
         new RemoveDirectWireConnectionPass,
         new ResolveAndCheck,
         new NoCConnectHartIdPass,
-        new EmitFirrtl("post-hartid-connection.fir"),
+        new EmitFirrtl(next("post-hartid-connection.fir")),
         new ResolveAndCheck,
         new NoCPartitionRoutersPass,
-        new EmitFirrtl("post-group-router.fir"),
-        new fame.EmitFAMEAnnotations("post-group-router.json"),
+        new EmitFirrtl(next("post-group-router.fir")),
+        new fame.EmitFAMEAnnotations(next("post-group-router.json")),
         new ResolveAndCheck,
         new NoCReparentRouterGroupPass,
-        new EmitFirrtl("post-reparent-router.fir"),
+        new EmitFirrtl(next("post-reparent-router.fir")),
         new ResolveAndCheck,
         new NoCCollectModulesInPathAndRegroupPass,
-        new EmitFirrtl("post-collect-and-reparent.fir"),
+        new EmitFirrtl(next("post-collect-and-reparent.fir")),
         new ResolveAndCheck,
         new DedupClockAndResetPass,
-        new EmitFirrtl("post-dedup-clock-and-reset.fir"),
+        new EmitFirrtl(next("post-dedup-clock-and-reset.fir")),
         new NoCConnectInterruptsPass,
         new ResolveAndCheck,
-        new EmitFirrtl("post-connect-interrupts-and-resolve.fir"),
+        new EmitFirrtl(next("post-connect-interrupts-and-resolve.fir")),
       )
     } else {
       Seq()
@@ -124,8 +131,8 @@ private[midas] class MidasTransforms extends Transform {
       firrtl.passes.RemoveValidIf,
       new firrtl.transforms.ConstantPropagation,
       firrtl.passes.SplitExpressions,
-      new EmitFirrtl("post-split-expressions.fir"),
-      new fame.EmitFAMEAnnotations("post-split-expressions.json"),
+      new EmitFirrtl(next("post-split-expressions.fir")),
+      new fame.EmitFAMEAnnotations(next("post-split-expressions.json")),
       // SplitExpressions invalidates ResolveKinds which can lead to missed CSE opportunities since
       // identical expressions may have different Kinds
       firrtl.passes.ResolveKinds,
@@ -135,43 +142,43 @@ private[midas] class MidasTransforms extends Transform {
       firrtl.passes.CheckTypes,
       new HighFirrtlToMiddleFirrtl,
       new MiddleFirrtlToLowFirrtl,
-      new EmitFirrtl("pre-partition.fir"),
-      new fame.EmitFAMEAnnotations("pre-partition.json"),
-      new fame.EmitAllAnnotations("pre-partition-all.json"),
+      new EmitFirrtl(next("pre-partition.fir")),
+      new fame.EmitFAMEAnnotations(next("pre-partition.json")),
+      new fame.EmitAllAnnotations(next("pre-partition-all.json")),
     ) ++
       fireAxePasses ++
       Seq(
-        new EmitFirrtl("post-partition.fir"),
-        new fame.EmitFAMEAnnotations("post-partition.json"),
-        new fame.EmitAllAnnotations("post-partition-all.json"),
+        new EmitFirrtl(next("post-partition.fir")),
+        new fame.EmitFAMEAnnotations(next("post-partition.json")),
+        new fame.EmitAllAnnotations(next("post-partition-all.json")),
         PlusArgsWiringTransform,
-        new EmitFirrtl("post-plusargs-wiring.fir"),
-        new fame.EmitFAMEAnnotations("post-plusargs-wiring.json"),
+        new EmitFirrtl(next("post-plusargs-wiring.fir")),
+        new fame.EmitFAMEAnnotations(next("post-plusargs-wiring.json")),
         CoerceAsyncToSyncReset,
         EnsureNoTargetIO,         // Simple checking pass
         new BridgeExtraction,     // Promote all the bridges to the top level / Add FAMEChannelConnectionAnnotation (which indicates the top level connections for FAMETop)
         new ResolveAndCheck,
-        new EmitFirrtl("post-bridge-extraction.fir"),
-        new fame.EmitFAMEAnnotations("post-bridge-extraction.json"),
+        new EmitFirrtl(next("post-bridge-extraction.fir")),
+        new fame.EmitFAMEAnnotations(next("post-bridge-extraction.json")),
         new HighFirrtlToMiddleFirrtl,
         new MiddleFirrtlToLowFirrtl,
         new AutoCounterTransform,
-        new EmitFirrtl("post-autocounter.fir"),
-        new fame.EmitFAMEAnnotations("post-autocounter.json"),
+        new EmitFirrtl(next("post-autocounter.fir")),
+        new fame.EmitFAMEAnnotations(next("post-autocounter.json")),
         new TraceDoctorTransform,
-        new EmitFirrtl("post-tracedoctor.fir"),
-        new fame.EmitFAMEAnnotations("post-tracedoctor.json"),
+        new EmitFirrtl(next("post-tracedoctor.fir")),
+        new fame.EmitFAMEAnnotations(next("post-tracedoctor.json")),
         new ResolveAndCheck,
         new AssertionSynthesis,
         new PrintSynthesis,
         new ResolveAndCheck,
-        new EmitFirrtl("post-debug-synthesis.fir"),
-        new fame.EmitFAMEAnnotations("post-debug-synthesis.json"),
+        new EmitFirrtl(next("post-debug-synthesis.fir")),
+        new fame.EmitFAMEAnnotations(next("post-debug-synthesis.json")),
         // All trigger sources and sinks must exist in the target RTL before this pass runs
         // As its naming suggests, it wires up all the trigger sources
         TriggerWiring,
-        new EmitFirrtl("post-trigger-wiring.fir"),
-        new fame.EmitFAMEAnnotations("post-trigger-wiring.json"),
+        new EmitFirrtl(next("post-trigger-wiring.fir")),
+        new fame.EmitFAMEAnnotations(next("post-trigger-wiring.json")),
         GlobalResetConditionWiring,
         // We should consider moving these lower
         ChannelClockInfoAnalysis, // Adds annotations containing info about clocks for each channel
@@ -179,17 +186,17 @@ private[midas] class MidasTransforms extends Transform {
         fame.WrapTop,             // Wrap FireSim with FAMETop
         fame.LabelMultiThreadedInstances,
         new ResolveAndCheck,
-        new EmitFirrtl("post-wrap-top.fir"),
-        new fame.EmitAllAnnotations("post-wrap-top-all.json"),
+        new EmitFirrtl(next("post-wrap-top.fir")),
+        new fame.EmitAllAnnotations(next("post-wrap-top-all.json")),
       ) ++
       optionalTargetTransforms ++
       Seq(
-        new EmitFirrtl("pre-extract-model.fir"),
-        new fame.EmitAllAnnotations("pre-extract-model-all.json"),
+        new EmitFirrtl(next("pre-extract-model.fir")),
+        new fame.EmitAllAnnotations(next("pre-extract-model-all.json")),
         new fame.ExtractModel,
         new ResolveAndCheck,
-        new EmitFirrtl("post-extract-model.fir"),
-        new fame.EmitAllAnnotations("post-extract-model-all.json"),
+        new EmitFirrtl(next("post-extract-model.fir")),
+        new fame.EmitAllAnnotations(next("post-extract-model-all.json")),
         new HighFirrtlToMiddleFirrtl,
         new MiddleFirrtlToLowFirrtl,
       ) ++
@@ -197,38 +204,38 @@ private[midas] class MidasTransforms extends Transform {
       Seq(
         fame.PromotePassthroughConnections,
         new ResolveAndCheck,
-        new EmitFirrtl("post-promote-passthrough.fir"),
-        new fame.EmitFAMEAnnotations("post-promote-passthrough.json"),
+        new EmitFirrtl(next("post-promote-passthrough.fir")),
+        new fame.EmitFAMEAnnotations(next("post-promote-passthrough.json")),
         new fame.FAMEDefaults,
-        new EmitFirrtl("post-fame-defaults.fir"),
-        new fame.EmitFAMEAnnotations("post-fame-defaults.json"),
+        new EmitFirrtl(next("post-fame-defaults.fir")),
+        new fame.EmitFAMEAnnotations(next("post-fame-defaults.json")),
         fame.FindDefaultClocks,
-        new fame.EmitFAMEAnnotations("post-find-default-clocks.json"),
+        new fame.EmitFAMEAnnotations(next("post-find-default-clocks.json")),
         new fame.ChannelExcision,
-        new fame.EmitFAMEAnnotations("post-channel-excision.json"),
-        new EmitFirrtl("post-channel-excision.fir"),
+        new fame.EmitFAMEAnnotations(next("post-channel-excision.json")),
+        new EmitFirrtl(next("post-channel-excision.fir")),
         // We could delay adding FAMETransformAnnotations to all top modules to here (not used before this)
         new fame.InferModelPorts,
-        new EmitFirrtl("post-infer-model-ports.fir"),
-        new fame.EmitFAMEAnnotations("post-infer-model-ports.json"),
+        new EmitFirrtl(next("post-infer-model-ports.fir")),
+        new fame.EmitFAMEAnnotations(next("post-infer-model-ports.json")),
         new fame.FAMETransform,
         DefineAbstractClockGate,
         fame.AddRemainingFanoutAnnotations,
-        new EmitFirrtl("post-fame-transform.fir"),
-        new fame.EmitFAMEAnnotations("post-fame-transform.json"),
+        new EmitFirrtl(next("post-fame-transform.fir")),
+        new fame.EmitFAMEAnnotations(next("post-fame-transform.json")),
         new ResolveAndCheck,
-        new EmitFirrtl("pre-fame5-transform.fir"),
-        new fame.EmitFAMEAnnotations("pre-fame5-transform.json"),
+        new EmitFirrtl(next("pre-fame5-transform.fir")),
+        new fame.EmitFAMEAnnotations(next("pre-fame5-transform.json")),
         fame.MultiThreadFAME5Models,
-        new EmitFirrtl("post-fame5-transform.fir"),
-        new fame.EmitFAMEAnnotations("post-fame5-transform.json"),
+        new EmitFirrtl(next("post-fame5-transform.fir")),
+        new fame.EmitFAMEAnnotations(next("post-fame5-transform.json")),
         new ResolveAndCheck,
         new passes.InlineInstances,
         passes.ResolveKinds,
         new fame.EmitAndWrapRAMModels,
         new ResolveAndCheck,
-        new EmitFirrtl("post-gen-sram-models.fir"),
-        new fame.EmitFAMEAnnotations("post-gen-sram-models.json"),
+        new EmitFirrtl(next("post-gen-sram-models.fir")),
+        new fame.EmitFAMEAnnotations(next("post-gen-sram-models.json")),
         new SimulationMapping(internalState.circuit.main),
         xilinx.HostSpecialization,
         new ResolveAndCheck,
