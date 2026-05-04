@@ -60,6 +60,7 @@ CIRCT_DEBUG_DIR := $(GENERATED_DIR)/circt_debug
 
 FIRRTL_FILE_CIRCT_OPT_MLIR    ?= $(GENERATED_DIR)/$(long_name).firrtl_opt.mlir
 CIRCT_OPT_MLIR_LOG_FILE       ?= $(FIRRTL_FILE_CIRCT_OPT_MLIR).log
+CIRCT_OPT_MLIR_STATS_FILE       ?= $(FIRRTL_FILE_CIRCT_OPT_MLIR).stats
 
 FIRRTL_FILE_POST_CIRCT := $(GENERATED_DIR)/$(long_name).post_circt.fir
 FIRRTL_FILE_POST_CIRCT_LOG_FILE ?= $(GENERATED_DIR)/$(long_name).circt-translate.log
