@@ -73,6 +73,11 @@ CIRCT_OPT_CMD = \
 set -o pipefail; \
 mkdir -p "$(CIRCT_DEBUG_DIR)"; \
 circt-opt "$(FIRRTL_FILE_CIRCT_IMPORT_MLIR)" $(CIRCT_FLAGS_ARG) \
+	--mlir-pass-statistics \
+	--mlir-pass-statistics-display=list \
+	--mlir-timing \
+	--mlir-timing-display=list \
+	--debug-only=pass-manager \
 	-o "$@" \
 |& tee "$(CIRCT_OPT_MLIR_LOG_FILE)"
 
@@ -88,6 +93,9 @@ CIRCT_EXPORT_CMD = \
 set -o pipefail; \
 circt-translate "$(FIRRTL_FILE_CIRCT_OPT_MLIR)" \
 	--export-firrtl \
+	--mlir-timing \
+	--mlir-timing-display=list \
+	--debug-only=pass-manager \
 	-o "$(FIRRTL_FILE_POST_CIRCT)" \
 |& tee "$(FIRRTL_FILE_POST_CIRCT_LOG_FILE)"
 
