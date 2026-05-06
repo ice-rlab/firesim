@@ -240,6 +240,43 @@ private[midas] class MidasTransforms extends Transform {
         xilinx.HostSpecialization,
         new ResolveAndCheck,
       )
-    (xforms.foldLeft(internalState))((in, xform) => xform.runTransform(in)).copy(form = outputForm)
+    (xforms
+          .foldLeft(internalState)) { (in, xform) =>
+            val passName = xform.getClass.getName
+
+            // Simple "size" metric: number of modules + total statements
+            def circuitSize(c: ir.Circuit): (Int, Int) = {
+              val numModules = c.modules.size
+              val numStmts = c.modules.map {
+                case m: ir.Module =>
+                  def countStmt(s: ir.Statement): Int = s match {
+                    case ir.Block(stmts) => stmts.map(countStmt).sum
+                    case _               => 1
+                  }
+                  countStmt(m.body)
+                case _ => 0
+              }.sum
+              (numModules, numStmts)
+            }
+
+            val (modsBefore, stmtsBefore) = circuitSize(in.circuit)
+            println(
+              s"[PASS START] $passName | modules=$modsBefore stmts=$stmtsBefore"
+            )
+
+            val start = System.nanoTime()
+            val out = xform.runTransform(in)
+            val end = System.nanoTime()
+
+            val (modsAfter, stmtsAfter) = circuitSize(out.circuit)
+            val timeMs = (end - start) / 1e6
+
+            println(
+              s"[PASS END]   $passName | modules=$modsAfter stmts=$stmtsAfter | Δstmts=${stmtsAfter - stmtsBefore} | time=${timeMs}ms"
+            )
+
+            out
+          }
+          .copy(form = outputForm)
   }
 }
