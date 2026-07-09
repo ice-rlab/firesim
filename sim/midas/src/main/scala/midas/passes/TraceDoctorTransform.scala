@@ -13,8 +13,7 @@ import midas.targetutils._
 import midas.{InternalTraceDoctorFirrtlAnnotation, InternalTriggerSinkAnnotation}
 import midas.passes.fame.{And, FAMEChannelConnectionAnnotation, Neq, WireChannel}
 import firesim.lib.bridgeutils.BridgeIOAnnotation
-import firechip.bridgeinterfaces.{TraceDoctorEventMetadata, TraceDoctorKey}
-import firechip.goldengateimplementations.TraceDoctorBridgeModule
+
 
 import java.io._
 import collection.mutable
