@@ -1,0 +1,13 @@
+{
+	"benchmark_name": "mergesort-bare",
+	"common_simulation_outputs": [
+		"uartlog",
+		"TRACEFILE-C*",
+		"AUTOCOUNTER*",
+		"*.vcd",
+		"TRACEDOCTOR*"
+	],
+	"post_run_hook": "../../../../../../../sims/firesim-workloads/mergesort-bare-workload/post_run.sh ",
+	"common_bootbinary": "../../../../../../../sims/firesim-workloads/mergesort-bare-workload/mergesort",
+	"common_rootfs": "../../../../../software/firemarshal/boards/default/installers/firesim/dummy.rootfs"
+}

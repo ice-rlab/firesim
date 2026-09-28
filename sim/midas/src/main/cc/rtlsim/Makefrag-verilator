@@ -30,6 +30,7 @@ override VERILATOR_FLAGS := \
 	-O2 \
 	-sv \
 	--vpi \
+	-I$(GEN_DIR) \
 	--output-split 10000 \
 	--output-split-cfuncs 100 \
 	-Wall \
@@ -37,6 +38,9 @@ override VERILATOR_FLAGS := \
 	-Wno-DECLFILENAME \
 	-Wno-VARHIDDEN \
 	-Wno-UNDRIVEN \
+	-Wno-BLKANDNBLK \
+	-Wno-UNOPTFLAT \
+	-Wno-fatal \
 	-CFLAGS "$(CXXFLAGS) -DVERILATOR" \
 	$(if $(LDFLAGS),-LDFLAGS "$(LDFLAGS)",) \
 	$(SIM_PREPROC_DEFINES) \

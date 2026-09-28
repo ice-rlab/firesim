@@ -1003,7 +1003,7 @@ class InnerRuntimeConfiguration:
     metasimulation_only_vcs_plusargs: str
     default_plusarg_passthrough: str
 
-    def __init__(self, runtimeconfigfile: str, configoverridedata: str) -> None:
+    def __init__(self, runtimeconfigfile: str, configoverridedatalist: List[str]) -> None:
 
         runtime_configfile = None
         with open(runtimeconfigfile, "r") as yaml_file:
@@ -1012,16 +1012,24 @@ class InnerRuntimeConfiguration:
         runtime_dict = runtime_configfile
 
         # override parts of the runtime conf if specified
-        if configoverridedata != "":
-            ## handle overriding part of the runtime conf
-            configoverrideval = configoverridedata.split()
-            overridesection = configoverrideval[0]
-            overridefield = configoverrideval[1]
-            overridevalue = configoverrideval[2]
-            rootLogger.warning("Overriding part of the runtime config with: ")
-            rootLogger.warning("""[{}]""".format(overridesection))
-            rootLogger.warning(overridefield + "=" + overridevalue)
-            runtime_dict[overridesection][overridefield] = overridevalue
+        visited = []
+        for configoverridedata in configoverridedatalist:
+            if configoverridedata != "":
+                ## handle overriding part of the runtime conf
+                configoverrideval = configoverridedata[0].split()
+                overridesection = configoverrideval[0]
+                overridefield = configoverrideval[1]
+                overridevalue = configoverrideval[2]
+                rootLogger.warning("Overriding part of the runtime config with: ")
+                rootLogger.warning("""[{}]""".format(overridesection))
+                rootLogger.warning(overridefield + "=" + overridevalue)
+                if (overridesection, overridefield) not in visited:
+                    runtime_dict[overridesection][overridefield] = overridevalue
+                else:
+                    runtime_dict[overridesection][overridefield] = (
+                        runtime_dict[overridesection][overridefield] + " " + overridevalue
+                    )
+                visited.append((overridesection, overridefield))
 
         def dict_assert(key_check, dict_name):
             assert (
