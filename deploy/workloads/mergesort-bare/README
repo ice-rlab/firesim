@@ -1,0 +1,4 @@
+This workload was generated using FireMarshal. See the following config
+and workload directory for details:
+../../../../../../../sims/firesim-workloads/mergesort-bare-workload/marshal-configs/mergesort-bare.json
+../../../../../../../sims/firesim-workloads/mergesort-bare-workload

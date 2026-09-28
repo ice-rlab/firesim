@@ -1,0 +1,12 @@
+{
+	"benchmark_name": "radiance",
+	"common_simulation_outputs": [
+		"uartlog",
+		"TRACEFILE-C*",
+		"AUTOCOUNTER*",
+		"*.vcd",
+		"TRACEDOCTOR*"
+	],
+	"common_bootbinary": "../../../../../../../sims/firesim-workloads/radiance-workload/hello",
+	"common_rootfs": "../../../../../software/firemarshal/boards/default/installers/firesim/dummy.rootfs"
+}
