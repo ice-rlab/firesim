@@ -5,6 +5,8 @@ package midas.targetutils
 import chisel3.{
   dontTouch,
   fromBooleanToLiteral,
+  fromIntToLiteral,
+  fromIntToWidth,
   when,
   Bits,
   Bool,
@@ -13,13 +15,17 @@ import chisel3.{
   MemBase,
   Module,
   Printable,
+  Record,
   RegNext,
   Reset,
+  SInt,
   UInt,
+  Vec,
   Wire,
   WireDefault,
 }
 import chisel3.printf.Printf
+import chisel3.util.Cat
 import chisel3.experimental.{annotate, requireIsHardware, BaseModule, ChiselAnnotation}
 import firrtl.RenameMap
 import firrtl.annotations.{
@@ -278,6 +284,143 @@ object TraceDoctorTarget {
     println(s"    TraceDoctorTarget.apply ${label} ${description}")
     emitAnnotation(target, Module.clock, Module.reset, label, description)
   }
+}
+
+/** A field in the flattened target, with its original name, width, bit offset, and signedness. */
+case class AutoTraceField(path: String, width: Int, offset: Int, signed: Boolean) {
+  require(path.nonEmpty && width > 0 && offset >= 0, "Invalid AutoTrace field layout")
+}
+
+/** Preserves field names and offsets when a Bundle or Vec target is flattened into a UInt.
+  * The host uses this schema to reconstruct the original fields.
+  */
+case class AutoTraceSchema(fields: Seq[AutoTraceField]) {
+  require(fields.nonEmpty, "AutoTrace targets must not be empty")
+  require(fields.map(_.path).distinct.size == fields.size, "AutoTrace field paths must be unique")
+  private val totalWidth = fields.map(_.width.toLong).sum
+  require(totalWidth <= Int.MaxValue, "AutoTrace target is too wide")
+  val width: Int = totalWidth.toInt
+  fields.foldLeft(0) { (offset, field) =>
+    require(field.offset == offset, s"AutoTrace field ${field.path} must be packed contiguously")
+    offset + field.width
+  }
+}
+
+/** AutoTrace annotation. Use the Chisel-side AutoTrace API to annotate a target.
+  * Each enabled cycle requests a record; the annotation imposes no retirement or squash filtering.
+  */
+case class AutoTraceFirrtlAnnotation(
+  target:      ReferenceTarget,         // Flattened signal or Bundle to observe.
+  enable:      ReferenceTarget,        // Capture condition or sampling pulse.
+  clock:       ReferenceTarget,
+  reset:       ReferenceTarget,
+  label:       String,
+  description: String,
+  schema:      AutoTraceSchema,
+) extends Annotation {
+  override def update(renames: RenameMap): Seq[Annotation] = {
+    val renamer       = new ReferenceTargetRenamer(renames)
+    val renamedTarget = renamer.exactRename(target)
+    val renamedEnable = renamer.exactRename(enable)
+    val renamedClock  = renamer.exactRename(clock)
+    val renamedReset  = renamer.exactRename(reset)
+    Seq(this.copy(target = renamedTarget, enable = renamedEnable, clock = renamedClock, reset = renamedReset))
+  }
+
+  def enclosingModule(): String = target.module
+  def enclosingModuleTarget(): ModuleTarget = ModuleTarget(target.circuit, enclosingModule())
+}
+
+/** Annotates hardware targets for full-record tracing, event occurrences, or periodic sampling.
+  * Like PerfCounter, this API emits annotations for a compiler transform and host bridge.
+  * Only combinational observation wires are added here; no target-side trace state is inserted.
+  */
+object AutoTrace {
+  // a field in the unflattened target
+  private case class TargetSignal(path: String, signal: Bits)
+  
+  private def flattenTarget(target: Data, path: String): Seq[TargetSignal] = target match {
+    // Explicit packing order: alphabetical Record fields, numeric Vec indices.
+    case record: Record => record.elements.toSeq.sortBy(_._1).flatMap { case (name, child) =>
+      flattenTarget(child, if (path.isEmpty) name else s"$path.$name")
+    }
+    case vector: Vec[_] => vector.zipWithIndex.flatMap { case (child, index) =>
+      flattenTarget(child, s"$path[$index]")
+    }.toSeq
+    case signal: UInt => Seq(TargetSignal(if (path.isEmpty) "value" else path, signal))
+    case signal: SInt => Seq(TargetSignal(if (path.isEmpty) "value" else path, signal))
+    case other => throw new IllegalArgumentException(
+      s"AutoTrace target $path has unsupported type ${other.getClass.getSimpleName}; use Bool, UInt, SInt, Record, or Vec")
+  }
+
+  private def emitAnnotation(
+    target: Data, enable: Bool, clock: Clock, reset: Reset,
+    label: String, description: String, eventOnly: Boolean,
+  ): Unit = {
+    require(label.nonEmpty, "AutoTrace labels must not be empty")
+    requireIsHardware(target, "Target passed to AutoTrace:")
+    requireIsHardware(enable, "Enable passed to AutoTrace:")
+    requireIsHardware(clock, "Clock passed to AutoTrace:")
+    requireIsHardware(reset, "Reset passed to AutoTrace:")
+    val targetSignals = flattenTarget(target, "")
+    require(targetSignals.nonEmpty, "AutoTrace targets must not be empty")
+    val fields = targetSignals.foldLeft(Vector.empty[AutoTraceField]) { (fields, targetSignal) =>
+      require(targetSignal.signal.isWidthKnown && targetSignal.signal.getWidth > 0,
+        s"AutoTrace field ${targetSignal.path} needs a positive explicit width before annotation")
+      val offset = fields.lastOption.map(f => Math.addExact(f.offset, f.width)).getOrElse(0)
+      fields :+ AutoTraceField(if (eventOnly) "occurred" else targetSignal.path,
+        targetSignal.signal.getWidth, offset, targetSignal.signal.isInstanceOf[SInt])
+    }
+    val schema = AutoTraceSchema(fields)
+    val packedTarget = Wire(UInt(schema.width.W)).suggestName("autotrace_target")
+    // First schema field goes in the low bits. Native aggregate asUInt has a different order.
+    packedTarget := Cat(targetSignals.reverse.map(_.signal.asUInt))
+    val captureEnable = Wire(Bool()).suggestName("autotrace_enable")
+    captureEnable := enable
+    dontTouch(packedTarget)
+    dontTouch(captureEnable)
+    annotate(new ChiselAnnotation {
+      def toFirrtl: Annotation = AutoTraceFirrtlAnnotation(
+        packedTarget.toTarget, captureEnable.toTarget, clock.toTarget, reset.toTarget,
+        label, description, schema)
+    })
+  }
+
+  /** Annotates a target for capture on every enabled cycle outside reset.
+    *
+    * @param target
+    *   The signal, Bundle, or Vec whose fields should be recorded.
+    * @param enable
+    *   Capture this cycle when high; a high level across several cycles captures several records.
+    * @param clock
+    *   The clock to which the target and enable are synchronized.
+    * @param reset
+    *   Suppresses capture while asserted.
+    * @param label
+    *   A name identifying the annotated target.
+    * @param description
+    *   A human-readable description of the target.
+    */
+  def apply(
+    target: Data, enable: Bool, clock: Clock, reset: Reset, label: String, description: String,
+  ): Unit = emitAnnotation(target, enable, clock, reset, label, description, eventOnly = false)
+
+  def apply(target: Data, enable: Bool, label: String, description: String): Unit =
+    apply(target, enable, Module.clock, Module.reset, label, description)
+
+  def apply(target: Data, enable: Bool, label: String): Unit = apply(target, enable, label, "")
+
+  // Records the target every cycle outside reset. 
+  def apply(target: Data, label: String, description: String = ""): Unit =
+    apply(target, true.B, label, description)
+
+  // Did the event occur this cycle?
+  def event(enable: Bool, label: String, description: String = ""): Unit =
+    emitAnnotation(1.U(1.W), enable, Module.clock, Module.reset, label, description, eventOnly = true)
+
+  // Samples the signal at the rate mentioned in enable
+  def sample(target: Data, enable: Bool, label: String, description: String = ""): Unit =
+    apply(target, enable, label, description)
 }
 
 sealed trait PerfCounterOpType
