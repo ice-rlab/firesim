@@ -76,6 +76,12 @@ class WithAutoCounter
       true
     })
 
+// Wires annotated AutoTrace targets into bridges using FireSim's host stream transport.
+class WithAutoTrace
+    extends Config((_, _, _) => { case midas.EnableAutoTrace =>
+      true
+    })
+
 class WithAutoCounterPrintf
     extends Config((_, _, _) => {
       case midas.EnableAutoCounter        => true

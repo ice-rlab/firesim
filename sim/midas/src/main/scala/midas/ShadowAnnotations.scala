@@ -129,6 +129,32 @@ object InternalAutoCounterFirrtlAnnotation {
   }
 }
 
+case class InternalAutoTraceFirrtlAnnotation(
+  target:      ReferenceTarget,
+  enable:      ReferenceTarget,
+  clock:       ReferenceTarget,
+  reset:       ReferenceTarget,
+  label:       String,
+  description: String,
+  schema:      AutoTraceSchema,
+) extends Annotation
+    with DontTouchAllTargets {
+  def update(renames: RenameMap): Seq[Annotation] = {
+    val renamer       = new ReferenceTargetRenamer(renames)
+    val renamedTarget = renamer.exactRename(target)
+    val renamedEnable = renamer.exactRename(enable)
+    val renamedClock  = renamer.exactRename(clock)
+    val renamedReset  = renamer.exactRename(reset)
+    Seq(this.copy(target = renamedTarget, enable = renamedEnable, clock = renamedClock, reset = renamedReset))
+  }
+  def enclosingModule(): String = target.module
+  def enclosingModuleTarget(): ModuleTarget = ModuleTarget(target.circuit, enclosingModule())
+}
+object InternalAutoTraceFirrtlAnnotation {
+  def apply(a: AutoTraceFirrtlAnnotation): InternalAutoTraceFirrtlAnnotation =
+    InternalAutoTraceFirrtlAnnotation(a.target, a.enable, a.clock, a.reset, a.label, a.description, a.schema)
+}
+
 case class InternalTraceDoctorFirrtlAnnotation(
   target:         ReferenceTarget,
   clock:          ReferenceTarget,
@@ -229,6 +255,7 @@ object ConvertExternalToInternalAnnotations {
         case grcs: GlobalResetConditionSink   => InternalGlobalResetConditionSink(grcs)
         case ffda: FirrtlFpgaDebugAnnotation  => InternalFirrtlFpgaDebugAnnotation(ffda)
         case afa: AutoCounterFirrtlAnnotation => InternalAutoCounterFirrtlAnnotation(afa)
+        case ata: AutoTraceFirrtlAnnotation   => InternalAutoTraceFirrtlAnnotation(ata)
         case tsrca: TriggerSourceAnnotation   => InternalTriggerSourceAnnotation(tsrca)
         case tsa: TriggerSinkAnnotation       => InternalTriggerSinkAnnotation(tsa)
         case xa: XDCAnnotation                => InternalXDCAnnotation(xa)

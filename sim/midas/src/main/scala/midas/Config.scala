@@ -46,6 +46,12 @@ case object ILAProbeTriggersKey extends Field[Int](2)
 // Auto Counter Switches
 case object EnableAutoCounter extends Field[Boolean](false)
 
+// AutoTrace annotations generate a host-stream bridge per clock domain.
+case object EnableAutoTrace extends Field[Boolean](false)
+// Hardware storage: complete target-cycle batches, followed by 512-bit host-stream beats.
+case object AutoTraceBufferDepth      extends Field[Int](AutoTraceConsts.captureBufferDepth)
+case object AutoTraceStreamQueueDepth extends Field[Int](AutoTraceConsts.streamQueueDepth)
+
 /** Chooses between the two implementation strategies for Auto Counter.
   *
   * True: Synthesized Printf Implementation
