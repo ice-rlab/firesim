@@ -76,6 +76,12 @@ class WithAutoCounter
       true
     })
 
+// Enables the PrefetchProf bridge for prefetch accuracy / window / timeliness analysis
+class WithPrefetchProf
+    extends Config((_, _, _) => { case midas.EnablePrefetchProf =>
+      true
+    })
+
 class WithAutoCounterPrintf
     extends Config((_, _, _) => {
       case midas.EnableAutoCounter        => true
