@@ -97,6 +97,11 @@ class BaseF1Config
         new midas.EC2F1Config
     )
 
+class AutoTraceF1Config extends Config(
+  new WithAutoTrace ++
+  new BaseF1Config
+)
+
 class BaseXilinxAlveoU200Config
     extends Config(
       new WithDefaultMemModel ++

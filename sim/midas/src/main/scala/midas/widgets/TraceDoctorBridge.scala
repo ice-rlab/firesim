@@ -12,7 +12,6 @@ import freechips.rocketchip.util._
 import midas.widgets._
 import firesim.lib.bridgeutils._
 
-import firechip.bridgeinterfaces._
 case class TraceDoctorEventMetadata(
   portName:    String,
   label:       String,
@@ -76,7 +75,8 @@ class TraceDoctorBridgeModule(key: TraceDoctorKey)(implicit p: Parameters)
     extends BridgeModule[HostPortIO[TraceDoctorTargetIO]]()(p)
     with StreamToHostCPU {
 
-  val toHostCPUQueueDepth  = TokenQueueConsts.TOKEN_QUEUE_DEPTH
+  // Keep the existing depth without depending on Firechip's SimpleNIC constants.
+  val toHostCPUQueueDepth  = 3072
   println(s"TraceDoctorBridgeModule key has ${key.eventMetadata.length} metadata entries")
 
   lazy val module = new BridgeModuleImp(this) {
@@ -101,12 +101,12 @@ class TraceDoctorBridgeModule(key: TraceDoctorKey)(implicit p: Parameters)
     val traceWidth = key.traceWidth
     println(s"TraceDoctorBridge traceWidth is ${traceWidth}")
     // Width of one token as defined by the DMA
-    val discreteDmaWidth = TokenQueueConsts.BIG_TOKEN_WIDTH
+    val discreteDmaWidth = BridgeStreamConstants.streamWidthBits
     // How many tokens we need to trace out the bit vector, at least one for DMA sanity
     val tokensPerTrace = math.max((traceWidth + discreteDmaWidth - 1) / discreteDmaWidth, 1)
 
     // Bridge DMA Parameters
-    lazy val dmaSize = BigInt((discreteDmaWidth / 8) * TokenQueueConsts.TOKEN_QUEUE_DEPTH)
+    lazy val dmaSize = BigInt((discreteDmaWidth / 8) * toHostCPUQueueDepth)
 
     // TODO: the commented out changes below show how multi-token transfers would work
     // However they show a bad performance for yet unknown reasons in terms of FPGA synth
