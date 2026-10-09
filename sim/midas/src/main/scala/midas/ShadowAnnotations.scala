@@ -156,6 +156,47 @@ object InternalTraceDoctorFirrtlAnnotation {
   }
 }
 
+case class InternalPrefetchProfFirrtlAnnotation(
+  target:      ReferenceTarget,
+  clock:       ReferenceTarget,
+  reset:       ReferenceTarget,
+  label:       String,
+  description: String,
+  // Set for elements of a PrefetchProfVecTarget sequence: the group name (label is then "<group>_<index>").
+  vecGroup:    Option[String] = None,
+  vecIndex:    Int            = 0,
+  // Optional filter tag (see PrefetchProfTarget): the event is only recorded while the tag is selected at run time.
+  tag:         String         = "",
+) extends Annotation
+    with DontTouchAllTargets {
+  def update(renames: RenameMap): Seq[Annotation] = {
+    val renamer       = new ReferenceTargetRenamer(renames)
+    val renamedTarget = renamer.exactRename(target)
+    val renamedClock  = renamer.exactRename(clock)
+    val renamedReset  = renamer.exactRename(reset)
+    Seq(this.copy(target = renamedTarget, clock = renamedClock, reset = renamedReset))
+  }
+  def enclosingModule(): String             = target.module
+  def enclosingModuleTarget(): ModuleTarget = ModuleTarget(target.circuit, enclosingModule())
+}
+object InternalPrefetchProfFirrtlAnnotation {
+  def apply(a: PrefetchProfFirrtlAnnotation): InternalPrefetchProfFirrtlAnnotation = {
+    InternalPrefetchProfFirrtlAnnotation(a.target, a.clock, a.reset, a.label, a.description, tag = a.tag)
+  }
+  def apply(a: PrefetchProfVecFirrtlAnnotation): InternalPrefetchProfFirrtlAnnotation = {
+    InternalPrefetchProfFirrtlAnnotation(
+      a.target,
+      a.clock,
+      a.reset,
+      s"${a.label}_${a.index}",
+      a.description,
+      Some(a.label),
+      a.index,
+      a.tag,
+    )
+  }
+}
+
 case class InternalTriggerSourceAnnotation(
   target:     ReferenceTarget,
   clock:      ReferenceTarget,
