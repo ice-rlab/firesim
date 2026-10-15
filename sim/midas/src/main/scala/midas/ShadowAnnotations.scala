@@ -137,6 +137,8 @@ case class InternalAutoTraceFirrtlAnnotation(
   label:       String,
   description: String,
   schema:      AutoTraceSchema,
+  historyDepth: Int = 0,
+  historyControl: Option[ReferenceTarget] = None,
 ) extends Annotation
     with DontTouchAllTargets {
   def update(renames: RenameMap): Seq[Annotation] = {
@@ -145,14 +147,15 @@ case class InternalAutoTraceFirrtlAnnotation(
     val renamedEnable = renamer.exactRename(enable)
     val renamedClock  = renamer.exactRename(clock)
     val renamedReset  = renamer.exactRename(reset)
-    Seq(this.copy(target = renamedTarget, enable = renamedEnable, clock = renamedClock, reset = renamedReset))
+    Seq(this.copy(target = renamedTarget, enable = renamedEnable, clock = renamedClock, reset = renamedReset,
+      historyControl = historyControl.map(renamer.exactRename)))
   }
   def enclosingModule(): String = target.module
   def enclosingModuleTarget(): ModuleTarget = ModuleTarget(target.circuit, enclosingModule())
 }
 object InternalAutoTraceFirrtlAnnotation {
   def apply(a: AutoTraceFirrtlAnnotation): InternalAutoTraceFirrtlAnnotation =
-    InternalAutoTraceFirrtlAnnotation(a.target, a.enable, a.clock, a.reset, a.label, a.description, a.schema)
+    InternalAutoTraceFirrtlAnnotation(a.target, a.enable, a.clock, a.reset, a.label, a.description, a.schema, a.historyDepth, a.historyControl)
 }
 
 case class InternalTraceDoctorFirrtlAnnotation(

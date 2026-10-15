@@ -317,14 +317,18 @@ case class AutoTraceFirrtlAnnotation(
   label:       String,
   description: String,
   schema:      AutoTraceSchema,
+  historyDepth: Int = 0,
+  historyControl: Option[ReferenceTarget] = None,
 ) extends Annotation {
+  require(historyDepth >= 0 && (historyDepth > 0) == historyControl.nonEmpty, "Invalid AutoTrace history configuration")
   override def update(renames: RenameMap): Seq[Annotation] = {
     val renamer       = new ReferenceTargetRenamer(renames)
     val renamedTarget = renamer.exactRename(target)
     val renamedEnable = renamer.exactRename(enable)
     val renamedClock  = renamer.exactRename(clock)
     val renamedReset  = renamer.exactRename(reset)
-    Seq(this.copy(target = renamedTarget, enable = renamedEnable, clock = renamedClock, reset = renamedReset))
+    Seq(this.copy(target = renamedTarget, enable = renamedEnable, clock = renamedClock, reset = renamedReset,
+      historyControl = historyControl.map(renamer.exactRename)))
   }
 
   def enclosingModule(): String = target.module
@@ -356,6 +360,7 @@ object AutoTrace {
   private def emitAnnotation(
     target: Data, enable: Bool, clock: Clock, reset: Reset,
     label: String, description: String, eventOnly: Boolean,
+    historyDepth: Int = 0, historyControl: Option[UInt] = None,
   ): Unit = {
     require(label.nonEmpty, "AutoTrace labels must not be empty")
     requireIsHardware(target, "Target passed to AutoTrace:")
@@ -382,7 +387,7 @@ object AutoTrace {
     annotate(new ChiselAnnotation {
       def toFirrtl: Annotation = AutoTraceFirrtlAnnotation(
         packedTarget.toTarget, captureEnable.toTarget, clock.toTarget, reset.toTarget,
-        label, description, schema)
+        label, description, schema, historyDepth, historyControl.map(_.toTarget))
     })
   }
 
@@ -409,6 +414,29 @@ object AutoTrace {
     apply(target, enable, Module.clock, Module.reset, label, description)
 
   def apply(target: Data, enable: Bool, label: String): Unit = apply(target, enable, label, "")
+
+  /** On trigger, capture up to depth prior samples, oldest first. The trigger-cycle
+    * sample is retained for subsequent triggers, but excluded from this snapshot.
+    * Output fields are count and samples[i].<field>; only indices below count are valid.
+    * History is maintained in the host bridge and cleared by the observation's reset.
+    */
+  def history(
+    target: Data, sampleEnable: Bool, trigger: Bool, depth: Int,
+    clock: Clock, reset: Reset, label: String, description: String,
+  ): Unit = {
+    require(depth > 0, "AutoTrace history depth must be positive")
+    requireIsHardware(sampleEnable, "Sample enable passed to AutoTrace.history:")
+    val control = Wire(UInt(2.W)).suggestName("autotrace_history_control")
+    control := Cat(reset.asBool, sampleEnable)
+    dontTouch(control)
+    emitAnnotation(target, trigger, clock, reset, label, description, eventOnly = false,
+      historyDepth = depth, historyControl = Some(control))
+  }
+
+  def history(
+    target: Data, sampleEnable: Bool, trigger: Bool, depth: Int,
+    label: String, description: String = "",
+  ): Unit = history(target, sampleEnable, trigger, depth, Module.clock, Module.reset, label, description)
 
   // Records the target every cycle outside reset. 
   def apply(target: Data, label: String, description: String = ""): Unit =

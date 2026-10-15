@@ -22,7 +22,20 @@ case class AutoTraceMetadata(
   label:         String,
   description:   String,
   schema:        AutoTraceSchema,
-)
+  historyDepth:  Int = 0,
+  historyControlPortName: Option[String] = None,
+) {
+  require(historyDepth >= 0 && (historyDepth > 0) == historyControlPortName.nonEmpty,
+    "Invalid AutoTrace history configuration")
+  val countWidth: Int = math.max(1, log2Ceil(BigInt(historyDepth) + 1))
+  def recordSchema: AutoTraceSchema = if (historyDepth == 0) schema else {
+    val fields = (0 until historyDepth).flatMap { i =>
+      schema.fields.map(f => f.copy(path = s"samples[$i].${f.path}",
+        offset = Math.addExact(countWidth, Math.addExact(Math.multiplyExact(i, schema.width), f.offset))))
+    }
+    AutoTraceSchema(AutoTraceField("count", countWidth, 0, false) +: fields)
+  }
+}
 
 object AutoTraceConsts {
   val captureBufferDepth = 16
@@ -41,7 +54,7 @@ case class AutoTraceParameters(
   require(traceMetadata.forall(_.traceId >= 0), "AutoTrace IDs must be nonnegative")
   require(traceMetadata.map(_.traceId).distinct.size == traceMetadata.size, "AutoTrace IDs must be unique")
   private val portNames = Seq(triggerName, resetPortName) ++
-    traceMetadata.flatMap(m => Seq(m.targetPortName, m.enablePortName))
+    traceMetadata.flatMap(m => Seq(m.targetPortName, m.enablePortName) ++ m.historyControlPortName)
   require(portNames.distinct.size == portNames.size, "AutoTrace bridge port names must be unique")
 
   def typeHints: Seq[Class[_]] = Seq(classOf[AutoTraceMetadata], classOf[AutoTraceSchema], classOf[AutoTraceField])
@@ -53,8 +66,9 @@ class AutoTraceBundle(key: AutoTraceParameters) extends Record {
   val underGlobalReset = Input(Bool())
   val targets          = key.traceMetadata.map(m => m.targetPortName -> Input(UInt(m.schema.width.W)))
   val enables          = key.traceMetadata.map(m => m.enablePortName -> Input(Bool()))
+  val historyControls  = key.traceMetadata.flatMap(_.historyControlPortName).map(n => n -> Input(UInt(2.W)))
   val elements         = collection.immutable.ListMap(
-    ((key.triggerName, triggerEnable) +: (key.resetPortName, underGlobalReset) +: (targets ++ enables)): _*
+    ((key.triggerName, triggerEnable) +: (key.resetPortName, underGlobalReset) +: (targets ++ enables ++ historyControls)): _*
   )
 }
 
@@ -72,6 +86,36 @@ object AutoTraceRecord {
       BridgeStreamConstants.streamWidthBits).toInt
 }
 
+/** A pre-trigger window. Snapshot observes state before the current accepted token. */
+private[midas] class AutoTraceHistory(width: Int, depth: Int) extends Module {
+  require(width > 0 && depth > 0)
+  private val countWidth = math.max(1, log2Ceil(BigInt(depth) + 1))
+  val io = IO(new Bundle {
+    val advance = Input(Bool())
+    val clear = Input(Bool())
+    val sample = Input(Bool())
+    val target = Input(UInt(width.W))
+    val snapshot = Output(UInt((Math.addExact(Math.multiplyExact(width, depth), countWidth)).W))
+  })
+  val count = RegInit(0.U(countWidth.W))
+  val samples = Reg(Vec(depth, UInt(width.W)))
+  when(io.advance) {
+    when(io.clear) {
+      count := 0.U
+    }.elsewhen(io.sample) {
+      when(count === depth.U) {
+        for (j <- 0 until depth - 1) { samples(j) := samples(j + 1) }
+        samples(depth - 1) := io.target
+      }.otherwise {
+        samples(count) := io.target
+        count := count + 1.U
+      }
+    }
+  }
+  val validSamples = (0 until depth).map(j => Mux(j.U < count, samples(j), 0.U))
+  io.snapshot := Cat(Cat(validSamples.reverse), count)
+}
+
 /** Captures complete target cycles before serializing observations onto FireSim's host stream.
   * Queue pressure stalls target tokens; timestamps advance only when a target token is accepted.
   * No retirement or squash condition is added to the caller's enable.
@@ -87,9 +131,9 @@ class AutoTraceBridgeModule(key: AutoTraceParameters)(implicit p: Parameters)
 
     private val metadata     = key.traceMetadata
     private val numTraces    = metadata.size
-    private val targetWidth  = metadata.foldLeft(0)((width, m) => Math.addExact(width, m.schema.width))
+    private val targetWidth  = metadata.foldLeft(0)((width, m) => Math.addExact(width, m.recordSchema.width))
     private val streamWidth  = BridgeStreamConstants.streamWidthBits
-    private val maxBeats     = metadata.map(m => AutoTraceRecord.beats(m.schema.width)).max
+    private val maxBeats     = metadata.map(m => AutoTraceRecord.beats(m.recordSchema.width)).max
     private val recordWidth  = Math.multiplyExact(maxBeats, streamWidth)
     private val beatIdxWidth = math.max(1, log2Ceil(maxBeats))
 
@@ -113,7 +157,19 @@ class AutoTraceBridgeModule(key: AutoTraceParameters)(implicit p: Parameters)
     hPort.toHost.hReady          := fireHelper.fire(hPort.toHost.hValid)
     hPort.fromHost.hValid        := true.B // Observation-only bridge: no return data channels.
     captures.io.enq.valid        := fireHelper.fire(canAdvance) && capture
-    captures.io.enq.bits.targets := Cat(hPort.hBits.targets.reverse.map(_._2))
+    val observedTargets = metadata.zipWithIndex.map { case (m, i) =>
+      val target = hPort.hBits.targets(i)._2
+      if (m.historyDepth == 0) target else {
+        val control = hPort.hBits.elements(m.historyControlPortName.get).asUInt
+        val history = Module(new AutoTraceHistory(m.schema.width, m.historyDepth))
+        history.io.advance := targetFire
+        history.io.clear := control(1) || hPort.hBits.underGlobalReset
+        history.io.sample := control(0)
+        history.io.target := target
+        history.io.snapshot
+      }
+    }
+    captures.io.enq.bits.targets := Cat(observedTargets.reverse)
     captures.io.enq.bits.enables := enabled
     captures.io.enq.bits.cycle   := cycles
     when(targetFire) { cycles := cycles + 1.U }
@@ -135,14 +191,14 @@ class AutoTraceBridgeModule(key: AutoTraceParameters)(implicit p: Parameters)
 
     // Emit records in metadata order; every record in this batch has the same timestamp.
     val selected = if (numTraces == 1) 0.U else PriorityEncoder(pending)
-    val offsets  = metadata.scanLeft(0)((offset, m) => Math.addExact(offset, m.schema.width))
+    val offsets  = metadata.scanLeft(0)((offset, m) => Math.addExact(offset, m.recordSchema.width))
     val records  = metadata.zipWithIndex.map { case (m, i) =>
       val target = savedTargets(offsets(i + 1) - 1, offsets(i))
-      Cat(target, savedCycle, m.schema.width.U(32.W), m.traceId.U(32.W)).pad(recordWidth)
+      Cat(target, savedCycle, m.recordSchema.width.U(32.W), m.traceId.U(32.W)).pad(recordWidth)
     }
     val record   = VecInit(records)(selected)
     val beats    = VecInit((0 until maxBeats).map(i => record((i + 1) * streamWidth - 1, i * streamWidth)))
-    val lastBeat = VecInit(metadata.map(m => (AutoTraceRecord.beats(m.schema.width) - 1).U(beatIdxWidth.W)))(selected)
+    val lastBeat = VecInit(metadata.map(m => (AutoTraceRecord.beats(m.recordSchema.width) - 1).U(beatIdxWidth.W)))(selected)
     streamEnq.valid := active
     streamEnq.bits  := beats(beatIndex)
     when(streamEnq.fire) {
@@ -175,8 +231,8 @@ class AutoTraceBridgeModule(key: AutoTraceParameters)(implicit p: Parameters)
               "instance_path" -> CStrLit(m.instancePath),
               "label"         -> CStrLit(m.label),
               "description"   -> CStrLit(m.description),
-              "target_width"  -> UInt32(m.schema.width),
-              "fields"        -> StdVector("AutoTraceField", m.schema.fields.map { field =>
+              "target_width"  -> UInt32(m.recordSchema.width),
+              "fields"        -> StdVector("AutoTraceField", m.recordSchema.fields.map { field =>
                 CppStruct("AutoTraceField", Seq(
                   "path"      -> CStrLit(field.path),
                   "width"     -> UInt32(field.width),

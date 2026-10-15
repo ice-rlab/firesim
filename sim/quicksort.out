@@ -5,9 +5,9 @@ Simulation complete.
 
 Emulation Performance Summary
 ------------------------------
-Wallclock Time Elapsed: 8.1 s
-Host Frequency: 3.340 KHz
+Wallclock Time Elapsed: 3.2 s
+Host Frequency: 8.442 KHz
 Target Cycles Emulated: 13954
-Effective Target Frequency: 1.721 KHz
-FMR: 1.94
+Effective Target Frequency: 4.328 KHz
+FMR: 1.95
 Note: The latter three figures are based on the fastest target clock.

@@ -53,7 +53,7 @@ class AutoTraceTransform extends Transform {
     }
     if (traceAnnos.isEmpty) return state
     traceAnnos.foreach { a =>
-      val references = Seq(a.target, a.enable, a.clock, a.reset)
+      val references = Seq(a.target, a.enable, a.clock, a.reset) ++ a.historyControl
       require(references.forall(r => r.circuit == a.target.circuit && r.module == a.target.module &&
         r.path.isEmpty && r.component.isEmpty), "AutoTrace requires scalar references in the same enclosing module")
     }
@@ -74,7 +74,8 @@ class AutoTraceTransform extends Transform {
     // Wire both signals with AutoCounter's BridgeTopWiring helper. Pair by absolute
     // instance path afterwards, never by label or traversal order.
     val wiringAnnos = updatedAnnos.flatMap(a => Seq(
-      BridgeTopWiringAnnotation(a.target, a.clock), BridgeTopWiringAnnotation(a.enable, a.clock)))
+      BridgeTopWiringAnnotation(a.target, a.clock), BridgeTopWiringAnnotation(a.enable, a.clock)) ++
+      a.historyControl.map(c => BridgeTopWiringAnnotation(c, a.clock)))
     require(!preppedState.annotations.exists(_.isInstanceOf[BridgeTopWiringAnnotation]),
       "AutoTrace cannot consume another pass's pending bridge wiring annotations")
     val wiredState = (new BridgeTopWiring("autotrace_"))
@@ -127,8 +128,16 @@ class AutoTraceTransform extends Transform {
         addChannel(enableOutput.topSink)
         val instancePath = (targetOutput.absoluteSource.circuit +:
           targetOutput.absoluteSource.asPath.map(_._1.value)).mkString(".")
+        val historyPort = anno.historyControl.map { control =>
+          val output = outputMap(targetOutput.absoluteSource.copy(ref = control.ref))
+          require(widths(output.topSink.ref) == 2, "AutoTrace history control must be two bits")
+          require(output.sinkClockPort == sinkClockRT && output.srcClockPort == targetOutput.srcClockPort,
+            "AutoTrace history control has a different clock")
+          addChannel(output.topSink)
+          output.topSink.ref
+        }
         AutoTraceMetadata(targetOutput.topSink.ref, enableOutput.topSink.ref, traceId,
-          instancePath, anno.label, anno.description, anno.schema)
+          instancePath, anno.label, anno.description, anno.schema, anno.historyDepth, historyPort)
       }
 
       // Use the same trigger and global-reset wiring as AutoCounter. Without a trigger
