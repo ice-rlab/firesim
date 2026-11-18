@@ -75,5 +75,5 @@ cd $CL_DIR/Nitefury-II/project
 vivado -mode batch -source top.tcl -tclargs $FREQUENCY $STRATEGY
 
 mkdir -p ../../vivado_proj
-cp project/project.runs/impl_1/Top_wrapper.bit ../../vivado_proj/firesim.bit
+cp project/project.runs/impl_1/Top_wrapper.bit ../../vivado_project/firesim.bit
 cp ../mcs/out.mcs ../../vivado_proj/firesim.mcs

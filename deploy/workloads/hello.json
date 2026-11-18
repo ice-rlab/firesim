@@ -1,0 +1,16 @@
+{
+	"benchmark_name": "hello",
+	"common_simulation_outputs": [
+		"uartlog",
+		"TRACEFILE-C*",
+		"AUTOCOUNTER*",
+		"*.vcd",
+		"TRACEDOCTOR*"
+	],
+	"common_bootbinary": "../../../../../software/firemarshal/images/firechip/hello/hello-bin",
+	"common_rootfs": "../../../../../software/firemarshal/images/firechip/hello/hello.img",
+	"common_outputs": [
+		"/output",
+		"/cpi"
+	]
+}

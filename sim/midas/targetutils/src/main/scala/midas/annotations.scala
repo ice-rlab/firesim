@@ -16,6 +16,7 @@ import chisel3.{
   RegNext,
   Reset,
   UInt,
+  Vec,
   Wire,
   WireDefault,
 }
@@ -196,6 +197,283 @@ object ExcludeInstanceAsserts {
     new ChiselAnnotation {
       def toFirrtl = ExcludeInstanceAssertsAnnotation(target)
     }
+}
+
+/** TraceDoctor annotations. Do not emit the FIRRTL annotations unless you are writing a target transformation, use the
+  * Chisel-side [[TraceDoctor]] object instead.
+  */
+case class TraceDoctorFirrtlAnnotation(
+  target:         ReferenceTarget,
+  clock:          ReferenceTarget,
+  reset:          ReferenceTarget,
+  label:          String,
+  description:    String,
+  coverGenerated: Boolean           = false,
+) extends firrtl.annotations.Annotation
+    //with HasSerializationHints
+    {
+  def update(renames: RenameMap): Seq[firrtl.annotations.Annotation] = {
+    val renamer       = new ReferenceTargetRenamer(renames)
+    val renamedTarget = renamer.exactRename(target)
+    val renamedClock  = renamer.exactRename(clock)
+    val renamedReset  = renamer.exactRename(reset)
+    Seq(this.copy(target = renamedTarget, clock = renamedClock, reset = renamedReset))
+  }
+  // The TraceDoctor tranform will reject this annotation if it's not enclosed
+  def shouldBeIncluded(modList: Seq[String]): Boolean = !coverGenerated || modList.contains(target.module)
+  def enclosingModule(): String             = target.module
+  def enclosingModuleTarget(): ModuleTarget = ModuleTarget(target.circuit, enclosingModule())
+  //def typeHints: Seq[Class[_]]              = Seq(opType.getClass)
+}
+
+object TraceDoctorTarget {
+  private def emitAnnotation(
+    target:      UInt,
+    clock:       Clock,
+    reset:       Reset,
+    label:       String,
+    description: String,
+  ): Unit = {
+    println(s"    TraceDoctorTarget.emitAnnotation ${label} ${description}")
+    requireIsHardware(target, "Target passed to PerfCounter:")
+    requireIsHardware(clock, "Clock passed to PerfCounter:")
+    requireIsHardware(reset, "Reset passed to PerfCounter:")
+    annotate(new ChiselAnnotation {
+      def toFirrtl =
+        TraceDoctorFirrtlAnnotation(target.toTarget, clock.toTarget, reset.toTarget, label, description)
+    })
+  }
+
+  /** Labels a signal as an event for which an host-side tracer (an "TraceDoctorTarget") should be generated). Events can be
+    * multi-bit to encode multiple occurances in a cycle (e.g., the number of instructions retired in a superscalar
+    * processor). NB: Golden Gate will not generate the coutner unless TraceDoctor is enabled in your the platform
+    * config. See the docs.fires.im for end-to-end usage information.
+    *
+    * @param target
+    *   The number of occurrences of the event (in the current cycle)
+    *
+    * @param clock
+    *   The clock to which this event is sychronized.
+    *
+    * @param reset
+    *   If the event is asserted while under the provide reset, it is not counted. TODO: This should be made optional.
+    *
+    * @param label
+    *   A verilog-friendly identifier for the event signal
+    *
+    * @param description
+    *   A human-friendly description of the event.
+    */
+  def apply(
+    target:      UInt,
+    clock:       Clock,
+    reset:       Reset,
+    label:       String,
+    description: String,
+  ): Unit =
+    emitAnnotation(target, clock, reset, label, description)
+
+  /** A simplified variation of the full apply method above that uses the implicit clock and reset.
+    */
+  def apply(target: UInt, label: String, description: String): Unit = {
+    println(s"    TraceDoctorTarget.apply ${label} ${description}")
+    emitAnnotation(target, Module.clock, Module.reset, label, description)
+  }
+}
+
+/** PrefetchProf annotations. Do not emit the FIRRTL annotations unless you are writing a target transformation, use the
+  * Chisel-side [[PrefetchProfTarget]] object instead.
+  */
+case class PrefetchProfFirrtlAnnotation(
+  target:      ReferenceTarget,
+  clock:       ReferenceTarget,
+  reset:       ReferenceTarget,
+  label:       String,
+  description: String,
+  tag:         String = "",
+) extends firrtl.annotations.Annotation {
+  def update(renames: RenameMap): Seq[firrtl.annotations.Annotation] = {
+    val renamer       = new ReferenceTargetRenamer(renames)
+    val renamedTarget = renamer.exactRename(target)
+    val renamedClock  = renamer.exactRename(clock)
+    val renamedReset  = renamer.exactRename(reset)
+    Seq(this.copy(target = renamedTarget, clock = renamedClock, reset = renamedReset))
+  }
+  def enclosingModule(): String             = target.module
+  def enclosingModuleTarget(): ModuleTarget = ModuleTarget(target.circuit, enclosingModule())
+}
+
+/** Checks a PrefetchProf filter tag: it is typed on the command line (+prefetchprof-filter), so keep it simple. */
+object PrefetchProfTag {
+  def check(tag: String): String = {
+    require(tag.matches("[A-Za-z0-9_]*"), s"PrefetchProf tag '$tag' must only contain letters, digits and underscores")
+    tag
+  }
+}
+
+object PrefetchProfTarget {
+
+  /** Labels a signal as an event to be sent to the host-side PrefetchProf bridge (e.g., prefetch issued, prefetch
+    * useful, demand miss). Events can be multi-bit to encode multiple occurrences in a cycle. NB: Golden Gate will not
+    * generate the bridge unless PrefetchProf is enabled in the platform config (see `WithPrefetchProf`).
+    *
+    * @param target
+    *   The event signal (in the current cycle)
+    *
+    * @param clock
+    *   The clock to which this event is sychronized.
+    *
+    * @param reset
+    *   If the event is asserted while under the provide reset, it is not captured.
+    *
+    * @param label
+    *   A verilog-friendly identifier for the event signal
+    *
+    * @param description
+    *   A human-friendly description of the event.
+    */
+  def apply(
+    target:      UInt,
+    clock:       Clock,
+    reset:       Reset,
+    label:       String,
+    description: String,
+  ): Unit = apply(target, clock, reset, label, description, "")
+
+  /** Same, with a filter tag. Events carrying a tag are only recorded while their tag is selected with the driver
+    * plusarg `+prefetchprof-filter=<tag>[,<tag>...]` (all tags are selected by default); untagged events always are.
+    * Use it to tell prefetchers apart when evaluating several in one build.
+    *
+    * @param tag
+    *   Filter tag, letters, digits and underscores only. Empty means untagged.
+    */
+  def apply(
+    target:      UInt,
+    clock:       Clock,
+    reset:       Reset,
+    label:       String,
+    description: String,
+    tag:         String,
+  ): Unit = {
+    PrefetchProfTag.check(tag)
+    requireIsHardware(target, "Target passed to PrefetchProfTarget:")
+    requireIsHardware(clock, "Clock passed to PrefetchProfTarget:")
+    requireIsHardware(reset, "Reset passed to PrefetchProfTarget:")
+    // Without this, CIRCT may merge or delete the named signal before Golden Gate can find it.
+    dontTouch(target)
+    annotate(new ChiselAnnotation {
+      def toFirrtl =
+        PrefetchProfFirrtlAnnotation(target.toTarget, clock.toTarget, reset.toTarget, label, description, tag)
+    })
+  }
+
+  /** Same as above, using the implicit clock and reset of the enclosing module.
+    */
+  def apply(target: UInt, label: String, description: String): Unit =
+    apply(target, Module.clock, Module.reset, label, description, "")
+
+  /** Same, with a filter tag. */
+  def apply(target: UInt, label: String, description: String, tag: String): Unit =
+    apply(target, Module.clock, Module.reset, label, description, tag)
+}
+
+/** PrefetchProf annotation for one element of an annotated sequence. Do not emit the FIRRTL annotations unless you are
+  * writing a target transformation, use the Chisel-side [[PrefetchProfVecTarget]] object instead.
+  *
+  * @param label
+  *   The name of the whole sequence
+  * @param index
+  *   Position of this element in the sequence
+  * @param length
+  *   Number of elements in the whole sequence
+  */
+case class PrefetchProfVecFirrtlAnnotation(
+  target:      ReferenceTarget,
+  clock:       ReferenceTarget,
+  reset:       ReferenceTarget,
+  label:       String,
+  description: String,
+  index:       Int,
+  length:      Int,
+  tag:         String = "",
+) extends firrtl.annotations.Annotation {
+  def update(renames: RenameMap): Seq[firrtl.annotations.Annotation] = {
+    val renamer       = new ReferenceTargetRenamer(renames)
+    val renamedTarget = renamer.exactRename(target)
+    val renamedClock  = renamer.exactRename(clock)
+    val renamedReset  = renamer.exactRename(reset)
+    Seq(this.copy(target = renamedTarget, clock = renamedClock, reset = renamedReset))
+  }
+}
+
+object PrefetchProfVecTarget {
+
+  /** Labels a sequence of signals as one named group of events for the host-side PrefetchProf bridge. In the bridge the
+    * group is accessed as a `Seq[UInt]` in the original order with `eventVec(label)`. Elements may have different
+    * widths. Each element is wired to the bridge separately.
+    *
+    * @param targets
+    *   The signals, in the order they will appear in the bridge
+    * @param label
+    *   A verilog-friendly identifier for the whole group. Element i is named `label_i`.
+    * @param description
+    *   A human-friendly description of the group.
+    */
+  def apply(
+    targets:     Seq[UInt],
+    clock:       Clock,
+    reset:       Reset,
+    label:       String,
+    description: String,
+  ): Unit = apply(targets, clock, reset, label, description, "")
+
+  /** Same, with a filter tag, see [[PrefetchProfTarget]]. */
+  def apply(
+    targets:     Seq[UInt],
+    clock:       Clock,
+    reset:       Reset,
+    label:       String,
+    description: String,
+    tag:         String,
+  ): Unit = {
+    PrefetchProfTag.check(tag)
+    require(targets.nonEmpty, s"PrefetchProfVecTarget '$label' was given an empty sequence")
+    requireIsHardware(clock, "Clock passed to PrefetchProfVecTarget:")
+    requireIsHardware(reset, "Reset passed to PrefetchProfVecTarget:")
+    targets.zipWithIndex.foreach { case (t, i) =>
+      requireIsHardware(t, s"Element $i of the sequence passed to PrefetchProfVecTarget:")
+      dontTouch(t)
+      annotate(new ChiselAnnotation {
+        def toFirrtl =
+          PrefetchProfVecFirrtlAnnotation(
+            t.toTarget,
+            clock.toTarget,
+            reset.toTarget,
+            label,
+            description,
+            i,
+            targets.length,
+            tag,
+          )
+      })
+    }
+  }
+
+  /** Same as above, using the implicit clock and reset of the enclosing module. */
+  def apply(targets: Seq[UInt], label: String, description: String): Unit =
+    apply(targets, Module.clock, Module.reset, label, description, "")
+
+  /** Same, with a filter tag. */
+  def apply(targets: Seq[UInt], label: String, description: String, tag: String): Unit =
+    apply(targets, Module.clock, Module.reset, label, description, tag)
+
+  /** Annotates every element of a Vec. */
+  def apply(targets: Vec[_ <: UInt], label: String, description: String): Unit =
+    apply(targets.toSeq, Module.clock, Module.reset, label, description, "")
+
+  /** Annotates every element of a Vec, with a filter tag. */
+  def apply(targets: Vec[_ <: UInt], label: String, description: String, tag: String): Unit =
+    apply(targets.toSeq, Module.clock, Module.reset, label, description, tag)
 }
 
 sealed trait PerfCounterOpType

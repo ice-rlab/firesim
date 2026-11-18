@@ -1174,6 +1174,8 @@ class XilinxAlveoInstanceDeployManager(InstanceDeployManager):
     def infrasetup_instance(self, uridir: str) -> None:
         """Handle infrastructure setup for this platform."""
         metasim_enabled = self.parent_node.metasimulation_enabled
+        self.instance_logger(f"""Infrasetup for Xilinx Alveo Platform""")
+
 
         if self.instance_assigned_simulations():
             # This is a sim-host node.
@@ -1271,7 +1273,7 @@ class XilinxAlveoInstanceDeployManager(InstanceDeployManager):
 
     def enumerate_fpgas(self, uridir: str) -> None:
         """Handle fpga setup for this platform."""
-
+        self.instance_logger(f"""Enumerating FPGAs for Xilinx Alveo Platform""")
         if self.instance_assigned_simulations():
             # This is a sim-host node.
 
@@ -1347,6 +1349,11 @@ class RHSResearchNitefuryIIInstanceDeployManager(XilinxAlveoInstanceDeployManage
     def __init__(self, parent_node: Inst) -> None:
         super().__init__(parent_node)
         self.PLATFORM_NAME = "rhsresearch_nitefury_ii"
+        
+class RHSResearchLitefuryInstanceDeployManager(XilinxAlveoInstanceDeployManager):
+    def __init__(self, parent_node: Inst) -> None:
+        super().__init__(parent_node)
+        self.PLATFORM_NAME = "rhsresearch_litefury"
 
 
 class XilinxVCU118InstanceDeployManager(InstanceDeployManager):
@@ -1371,6 +1378,10 @@ class XilinxVCU118InstanceDeployManager(InstanceDeployManager):
                 run(f"sudo {cmd}", shell=True)
             else:
                 self.instance_logger("XDMA Driver Kernel Module already loaded.")
+            # run the xdma permissions script -- https://github.com/firesim/firesim/blob/396ef364237f387efec29da798981374c3f7d9d0/deploy/sudo-scripts/firesim-chmod-xdma-perm, otherwise fd != 0 assert fails
+            cmd = f"{script_path}/firesim-chmod-xdma-perm"  # fix: https://github.com/firesim/firesim/blob/396ef364237f387efec29da798981374c3f7d9d0/deploy/runtools/run_farm_deploy_managers.py#L1068
+            check_script(cmd)
+            run(f"sudo {cmd}")
 
     def load_xvsec(self) -> None:
         """load the xvsec kernel modules."""
@@ -1404,9 +1415,9 @@ class XilinxVCU118InstanceDeployManager(InstanceDeployManager):
                 self.instance_logger(f"""Determine BDF for {slotno}""")
                 collect = run("lspci | grep -i xilinx")
 
-                # TODO: is hardcoded cap 0x1 correct?
                 # TODO: is "Partial Reconfig Clear File" useful (see xvsecctl help)?
                 bdfs = [
+                    # capno is hardcoded to 0x1 otherwise xvsecctl program fails
                     {"busno": "0x" + i[:2], "devno": "0x" + i[3:5], "capno": "0x1"}
                     for i in collect.splitlines()
                     if len(i.strip()) >= 0
@@ -1432,10 +1443,10 @@ class XilinxVCU118InstanceDeployManager(InstanceDeployManager):
                 self.instance_logger(f"""Determine BDF for {slotno}""")
                 collect = run("lspci | grep -i xilinx")
 
-                # TODO: is hardcoded cap 0x1 correct?
                 # TODO: is "Partial Reconfig Clear File" useful (see xvsecctl help)?
                 bdfs = [
-                    {"busno": "0x" + i[:2], "devno": "0x" + i[3:5], "capno": "0x1"}
+                    # Cannot hardcode capno to 0x1 here, if 0x1 change permissions sometimes cannot find the device in /sys/bus/pci/devices/
+                    {"busno": "0x" + i[:2], "devno": "0x" + i[3:5], "capno": "0x" + i[6:7]}
                     for i in collect.splitlines()
                     if len(i.strip()) >= 0
                 ]
@@ -1454,6 +1465,8 @@ class XilinxVCU118InstanceDeployManager(InstanceDeployManager):
 
     def infrasetup_instance(self, uridir: str) -> None:
         """Handle infrastructure setup for this platform."""
+        self.instance_logger(f"""Infrasetup for Xilinx VCU118""")
+
         if self.instance_assigned_simulations():
             # This is a sim-host node.
 

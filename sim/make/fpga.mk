@@ -43,6 +43,14 @@ fpga_delivery_files = $(addprefix $(fpga_delivery_dir)/$(BASE_FILE_NAME), \
 # Files used to run FPGA-level metasimulation
 fpga_sim_delivery_files = $(fpga_driver_dir)/$(DESIGN)-$(PLATFORM)
 
+# Loose Verilog/SystemVerilog header files (e.g. registers.svh, Cyclotron.vh) that blackbox
+# modules pull in via `include rather than compiling standalone. FIRRTL's blackbox-resource
+# extraction writes these into GENERATED_DIR but never concatenates them into
+# $(simulator_verilog), so they must be copied alongside the design sources for Vivado's
+# `include search to find them. Harmlessly re-copies $(BASE_FILE_NAME).defines.vh, which is
+# already delivered above.
+fpga_delivery_header_stamp = $(fpga_delivery_dir)/.header-stamp
+
 $(fpga_work_dir)/stamp: $(shell find $(board_dir)/cl_firesim -name '*')
 	mkdir -p $(@D)
 	cp -rf $(board_dir)/cl_firesim -T $(fpga_work_dir)
@@ -63,9 +71,14 @@ $(fpga_driver_dir)/$(DESIGN)-$(PLATFORM): $($(PLATFORM))
 	mkdir -p $(@D)
 	cp -f $< $@
 
+$(fpga_delivery_header_stamp): $(simulator_verilog) $(fpga_work_dir)/stamp
+	cp -f $(GENERATED_DIR)/*.svh $(fpga_delivery_dir)/ 2>/dev/null || true
+	cp -f $(GENERATED_DIR)/*.vh $(fpga_delivery_dir)/ 2>/dev/null || true
+	touch $@
+
 # Goes as far as setting up the build directory without running the cad job
 # Used by the manager before passing a build to a remote machine
-replace-rtl: $(fpga_delivery_files) $(fpga_sim_delivery_files)
+replace-rtl: $(fpga_delivery_files) $(fpga_sim_delivery_files) $(fpga_delivery_header_stamp)
 
 .PHONY: replace-rtl
 
@@ -76,7 +89,7 @@ $(firesim_base_dir)/scripts/checkpoints/$(target_sim_tuple): $(fpga_work_dir)/st
 # Runs a local fpga-bitstream build. Strongly consider using the manager instead.
 .PHONY: fpga
 fpga: export CL_DIR := $(fpga_work_dir)
-fpga: $(fpga_delivery_files) $(firesim_base_dir)/scripts/checkpoints/$(target_sim_tuple)
+fpga: $(fpga_delivery_files) $(fpga_delivery_header_stamp) $(firesim_base_dir)/scripts/checkpoints/$(target_sim_tuple)
 	cd $(fpga_build_dir)/scripts && ./aws_build_dcp_from_cl.sh -notify
 
 #########################

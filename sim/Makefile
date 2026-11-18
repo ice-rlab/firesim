@@ -13,9 +13,9 @@
 .PHONY: default
 default: compile
 
-ifndef FIRESIM_ENV_SOURCED
-$(error You must source sourceme-manager.sh or env.sh to use this Makefile)
-endif
+# ifndef FIRESIM_ENV_SOURCED
+# $(error You must source sourceme-manager.sh or env.sh to use this Makefile)
+# endif
 
 firesim_base_dir := $(abspath .)
 
@@ -54,6 +54,7 @@ include make/config.mk
 include make/scala-build.mk
 
 include $(TARGET_PROJECT_MAKEFRAG)/build.mk
+include make/circt.mk
 include make/goldengate.mk
 include make/post-synth.mk
 

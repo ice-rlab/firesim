@@ -61,6 +61,9 @@ case object EnableAutoCounter extends Field[Boolean](false)
   */
 case object AutoCounterUsePrintfImpl extends Field[Boolean](false)
 
+// PrefetchProf Switch: instantiates the PrefetchProf bridge if any PrefetchProfTarget annotations are present
+case object EnablePrefetchProf extends Field[Boolean](false)
+
 case object HasDMAChannel extends Field[Boolean]
 
 // Enables multi-cycle RAM model generation (as demonstrated in the ICCAD2019 paper)

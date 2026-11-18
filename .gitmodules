@@ -22,3 +22,7 @@
 [submodule "sim/cde"]
 	path = sim/cde
 	url = https://github.com/chipsalliance/cde.git
+[submodule "sim/firrtl"]
+	path = sim/firrtl
+	url = git@github.com:chipsalliance/firrtl.git
+	branch = 1.6.x

@@ -42,6 +42,7 @@ lazy val commonSettings = Seq(
     Resolver.sonatypeRepo("snapshots"),
     Resolver.sonatypeRepo("releases"),
     Resolver.mavenLocal),
+  dependencyOverrides += "edu.berkeley.cs" %% "firrtl" % "1.6.0-matt-SNAPSHOT",
   assembly / test := {},
   assembly / assemblyMergeStrategy := {
     case PathList("chisel3", "stage", xs @ _*) => chiselFirrtlMergeStrategy

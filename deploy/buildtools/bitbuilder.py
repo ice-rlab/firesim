@@ -72,7 +72,7 @@ class BitBuilder(metaclass=abc.ABCMeta):
     def replace_rtl(self) -> None:
         """Generate Verilog from build config. Should run on the manager host."""
         rootLogger.info(
-            f"Building Verilog for {self.build_config.get_chisel_quintuplet()}"
+            f"Building Verilog for {self.build_config.get_chisel_sextuplet()}"
         )
 
         deploy_dir = get_deploy_dir()
@@ -88,7 +88,7 @@ class BitBuilder(metaclass=abc.ABCMeta):
     def build_driver(self) -> None:
         """Build FireSim FPGA driver from build config. Should run on the manager host."""
         rootLogger.info(
-            f"Building FPGA driver for {self.build_config.get_chisel_quintuplet()}"
+            f"Building FPGA driver for {self.build_config.get_chisel_sextuplet()}"
         )
 
         deploy_dir = get_deploy_dir()
@@ -113,25 +113,25 @@ class BitBuilder(metaclass=abc.ABCMeta):
     def get_metadata_string(self) -> str:
         """Standardized metadata format used across different FPGA platforms"""
         # construct the "tags" we store in the metadata description
-        tag_build_quintuplet = self.build_config.get_chisel_quintuplet()
-        tag_deploy_quintuplet = self.build_config.get_effective_deploy_quintuplet()
+        tag_build_sextuplet = self.build_config.get_chisel_sextuplet()
+        tag_deploy_sextuplet = self.build_config.get_effective_deploy_sextuplet()
 
         tag_build_triplet = self.build_config.get_chisel_triplet()
         tag_deploy_triplet = self.build_config.get_effective_deploy_triplet()
 
         tag_build_makefrag = self.build_config.get_deploy_makefrag()
         tag_deploy_makefrag = self.build_config.get_deploy_makefrag()
-
+        
         # the asserts are left over from when we tried to do this with tags
         # - technically I don't know how long these descriptions are allowed to be,
         # but it's at least 2048 chars, so I'll leave these here for now as sanity
         # checks.
         assert (
-            len(tag_build_quintuplet) <= 255
-        ), "ERR: does not support tags longer than 256 chars for build_quintuplet"
+            len(tag_build_sextuplet) <= 255
+        ), "ERR: does not support tags longer than 256 chars for build_sextuplet"
         assert (
-            len(tag_deploy_quintuplet) <= 255
-        ), "ERR: does not support tags longer than 256 chars for deploy_quintuplet"
+            len(tag_deploy_sextuplet) <= 255
+        ), "ERR: does not support tags longer than 256 chars for deploy_sextuplet"
         assert (
             len(tag_build_triplet) <= 255
         ), "ERR: does not support tags longer than 256 chars for build_triplet"
@@ -159,13 +159,13 @@ class BitBuilder(metaclass=abc.ABCMeta):
 
         # construct the serialized description from these tags.
         return firesim_tags_to_description(
-            tag_build_quintuplet,
-            tag_deploy_quintuplet,
+            tag_build_sextuplet,
+            tag_deploy_sextuplet,
             tag_build_triplet,
             tag_deploy_triplet,
             tag_fsimcommit,
             tag_build_makefrag,
-            tag_deploy_makefrag,
+            tag_deploy_makefrag
         )
 
 
@@ -200,17 +200,17 @@ class F1BitBuilder(BitBuilder):
         # check to see email notifications can be subscribed
         get_snsname_arn()
 
-    def cl_dir_setup(self, chisel_quintuplet: str, dest_build_dir: str) -> str:
+    def cl_dir_setup(self, chisel_sextuplet: str, dest_build_dir: str) -> str:
         """Setup CL_DIR on build host.
 
         Args:
-            chisel_quintuplet: Build config chisel quintuplet used to uniquely identify build dir.
+            chisel_sextuplet: Build config chisel sextuplet used to uniquely identify build dir.
             dest_build_dir: Destination base directory to use.
 
         Returns:
             Path to CL_DIR directory (that is setup) or `None` if invalid.
         """
-        fpga_build_postfix = f"hdk/cl/developer_designs/cl_{chisel_quintuplet}"
+        fpga_build_postfix = f"hdk/cl/developer_designs/cl_{chisel_sextuplet}"
 
         # local paths
         local_awsfpga_dir = f"{get_deploy_dir()}/../platforms/f1/aws-fpga"
@@ -268,8 +268,8 @@ class F1BitBuilder(BitBuilder):
             message_title = "FireSim FPGA Build Failed"
 
             message_body = (
-                "Your FPGA build failed for quintuplet: "
-                + self.build_config.get_chisel_quintuplet()
+                "Your FPGA build failed for sextuplet: "
+                + self.build_config.get_chisel_sextuplet()
             )
 
             send_firesim_notification(message_title, message_body)
@@ -283,7 +283,7 @@ class F1BitBuilder(BitBuilder):
 
         local_deploy_dir = get_deploy_dir()
         fpga_build_postfix = (
-            f"hdk/cl/developer_designs/cl_{self.build_config.get_chisel_quintuplet()}"
+            f"hdk/cl/developer_designs/cl_{self.build_config.get_chisel_sextuplet()}"
         )
         local_results_dir = (
             f"{local_deploy_dir}/results-build/{self.build_config.get_build_dir_name()}"
@@ -291,7 +291,7 @@ class F1BitBuilder(BitBuilder):
 
         # 'cl_dir' holds the eventual directory in which vivado will run.
         cl_dir = self.cl_dir_setup(
-            self.build_config.get_chisel_quintuplet(),
+            self.build_config.get_chisel_sextuplet(),
             build_farm.get_build_host(self.build_config).dest_build_dir,
         )
 
@@ -383,7 +383,7 @@ class F1BitBuilder(BitBuilder):
         )
 
         with lcd(
-            f"{local_results_dir}/cl_{self.build_config.get_chisel_quintuplet()}/build/checkpoints/to_aws/"
+            f"{local_results_dir}/cl_{self.build_config.get_chisel_sextuplet()}/build/checkpoints/to_aws/"
         ):
             files = local("ls *.tar", capture=True)
             rootLogger.debug(files)
@@ -429,7 +429,7 @@ class F1BitBuilder(BitBuilder):
             message_title = "FireSim FPGA Build Completed"
             agfi_entry = afiname + ":\n"
             agfi_entry += "    agfi: " + agfi + "\n"
-            agfi_entry += "    deploy_quintuplet_override: null\n"
+            agfi_entry += "    deploy_sextuplet_override: null\n"
             agfi_entry += "    custom_runtime_config: null\n"
             message_body = (
                 "Your AGFI has been created!\nAdd\n\n"
@@ -486,17 +486,17 @@ class VitisBitBuilder(BitBuilder):
     def setup(self) -> None:
         return
 
-    def cl_dir_setup(self, chisel_quintuplet: str, dest_build_dir: str) -> str:
+    def cl_dir_setup(self, chisel_sextuplet: str, dest_build_dir: str) -> str:
         """Setup CL_DIR on build host.
 
         Args:
-            chisel_quintuplet: Build config chisel quintuplet used to uniquely identify build dir.
+            chisel_sextuplet: Build config chisel sextuplet used to uniquely identify build dir.
             dest_build_dir: Destination base directory to use.
 
         Returns:
             Path to CL_DIR directory (that is setup) or `None` if invalid.
         """
-        fpga_build_postfix = f"cl_{chisel_quintuplet}"
+        fpga_build_postfix = f"cl_{chisel_sextuplet}"
 
         # local paths
         local_vitis_dir = f"{get_deploy_dir()}/../platforms/vitis"
@@ -554,8 +554,8 @@ class VitisBitBuilder(BitBuilder):
             message_title = "FireSim Vitis FPGA Build Failed"
 
             message_body = (
-                "Your FPGA build failed for quintuplet: "
-                + self.build_config.get_chisel_quintuplet()
+                "Your FPGA build failed for sextuplet: "
+                + self.build_config.get_chisel_sextuplet()
             )
 
             rootLogger.info(message_title)
@@ -566,14 +566,14 @@ class VitisBitBuilder(BitBuilder):
         rootLogger.info("Building Vitis Bitstream from Verilog")
 
         local_deploy_dir = get_deploy_dir()
-        fpga_build_postfix = f"cl_{self.build_config.get_chisel_quintuplet()}"
+        fpga_build_postfix = f"cl_{self.build_config.get_chisel_sextuplet()}"
         local_results_dir = (
             f"{local_deploy_dir}/results-build/{self.build_config.get_build_dir_name()}"
         )
 
         # 'cl_dir' holds the eventual directory in which vivado will run.
         cl_dir = self.cl_dir_setup(
-            self.build_config.get_chisel_quintuplet(),
+            self.build_config.get_chisel_sextuplet(),
             build_farm.get_build_host(self.build_config).dest_build_dir,
         )
 
@@ -636,6 +636,11 @@ class VitisBitBuilder(BitBuilder):
 
         # store metadata string
         local(f"""echo '{self.get_metadata_string()}' >> {tar_staging_path}/metadata""")
+        
+        # Store circt flags if they exist
+        rootLogger.info(f"Writing circt_flags into {tar_staging_path}/circt_flags")
+        with open(f"{tar_staging_path}/circt_flags", "a") as f:
+            f.write(self.build_config.get_circt_flags())
 
         # form tar.gz
         with prefix(f"cd {local_cl_dir}"):
@@ -643,7 +648,7 @@ class VitisBitBuilder(BitBuilder):
 
         hwdb_entry = hwdb_entry_name + ":\n"
         hwdb_entry += f"    bitstream_tar: file://{local_cl_dir}/{tar_name}\n"
-        hwdb_entry += f"    deploy_quintuplet_override: null\n"
+        hwdb_entry += f"    deploy_sextuplet_override: null\n"
         hwdb_entry += "    custom_runtime_config: null\n"
 
         message_title = "FireSim FPGA Build Completed"
@@ -692,17 +697,17 @@ class XilinxAlveoBitBuilder(BitBuilder):
     def setup(self) -> None:
         return
 
-    def cl_dir_setup(self, chisel_quintuplet: str, dest_build_dir: str) -> str:
+    def cl_dir_setup(self, chisel_sextuplet: str, dest_build_dir: str) -> str:
         """Setup CL_DIR on build host.
 
         Args:
-            chisel_quintuplet: Build config chisel quintuplet used to uniquely identify build dir.
+            chisel_sextuplet: Build config chisel sextuplet used to uniquely identify build dir.
             dest_build_dir: Destination base directory to use.
 
         Returns:
             Path to CL_DIR directory (that is setup) or `None` if invalid.
         """
-        fpga_build_postfix = f"cl_{chisel_quintuplet}"
+        fpga_build_postfix = f"cl_{chisel_sextuplet}"
 
         # local paths
         local_alveo_dir = (
@@ -764,8 +769,8 @@ class XilinxAlveoBitBuilder(BitBuilder):
             )
 
             message_body = (
-                "Your FPGA build failed for quintuplet: "
-                + self.build_config.get_chisel_quintuplet()
+                "Your FPGA build failed for sextuplet: "
+                + self.build_config.get_chisel_sextuplet()
             )
 
             rootLogger.info(message_title)
@@ -778,14 +783,14 @@ class XilinxAlveoBitBuilder(BitBuilder):
         )
 
         local_deploy_dir = get_deploy_dir()
-        fpga_build_postfix = f"cl_{self.build_config.get_chisel_quintuplet()}"
+        fpga_build_postfix = f"cl_{self.build_config.get_chisel_sextuplet()}"
         local_results_dir = (
             f"{local_deploy_dir}/results-build/{self.build_config.get_build_dir_name()}"
         )
 
         # 'cl_dir' holds the eventual directory in which vivado will run.
         cl_dir = self.cl_dir_setup(
-            self.build_config.get_chisel_quintuplet(),
+            self.build_config.get_chisel_sextuplet(),
             build_farm.get_build_host(self.build_config).dest_build_dir,
         )
 
@@ -854,6 +859,11 @@ class XilinxAlveoBitBuilder(BitBuilder):
 
         # store metadata string
         local(f"""echo '{self.get_metadata_string()}' >> {tar_staging_path}/metadata""")
+        
+        # Store circt flags if they exist
+        rootLogger.info(f"Writing circt_flags into {tar_staging_path}/circt_flags")
+        with open(f"{tar_staging_path}/circt_flags", "a") as f:
+            f.write(self.build_config.get_circt_flags())
 
         # form tar.gz
         with prefix(f"cd {local_cl_dir}"):
@@ -861,7 +871,7 @@ class XilinxAlveoBitBuilder(BitBuilder):
 
         hwdb_entry = hwdb_entry_name + ":\n"
         hwdb_entry += f"    bitstream_tar: file://{local_cl_dir}/{tar_name}\n"
-        hwdb_entry += f"    deploy_quintuplet_override: null\n"
+        hwdb_entry += f"    deploy_sextuplet_override: null\n"
         hwdb_entry += "    custom_runtime_config: null\n"
 
         message_title = "FireSim FPGA Build Completed"
@@ -921,17 +931,17 @@ class XilinxVCU118BitBuilder(XilinxAlveoBitBuilder):
         super().__init__(build_config, args)
         self.BOARD_NAME = "xilinx_vcu118"
 
-    def cl_dir_setup(self, chisel_quintuplet: str, dest_build_dir: str) -> str:
+    def cl_dir_setup(self, chisel_sextuplet: str, dest_build_dir: str) -> str:
         """Setup CL_DIR on build host.
 
         Args:
-            chisel_quintuplet: Build config chisel quintuplet used to uniquely identify build dir.
+            chisel_sextuplet: Build config chisel sextuplet used to uniquely identify build dir.
             dest_build_dir: Destination base directory to use.
 
         Returns:
             Path to CL_DIR directory (that is setup) or `None` if invalid.
         """
-        fpga_build_postfix = f"cl_{chisel_quintuplet}"
+        fpga_build_postfix = f"cl_{chisel_sextuplet}"
 
         # local paths
         local_alveo_dir = f"{get_deploy_dir()}/../platforms/{self.build_config.PLATFORM}/garnet-firesim"
@@ -979,17 +989,73 @@ class RHSResearchNitefuryIIBitBuilder(XilinxAlveoBitBuilder):
         super().__init__(build_config, args)
         self.BOARD_NAME = "rhsresearch_nitefury_ii"
 
-    def cl_dir_setup(self, chisel_quintuplet: str, dest_build_dir: str) -> str:
+    def cl_dir_setup(self, chisel_sextuplet: str, dest_build_dir: str) -> str:
         """Setup CL_DIR on build host.
 
         Args:
-            chisel_quintuplet: Build config chisel quintuplet used to uniquely identify build dir.
+            chisel_sextuplet: Build config chisel sextuplet used to uniquely identify build dir.
             dest_build_dir: Destination base directory to use.
 
         Returns:
             Path to CL_DIR directory (that is setup) or `None` if invalid.
         """
-        fpga_build_postfix = f"Sample-Projects/Project-0/cl_{chisel_quintuplet}"
+        fpga_build_postfix = f"Sample-Projects/Project-0/cl_{chisel_sextuplet}"
+
+        # local paths
+        local_alveo_dir = f"{get_deploy_dir()}/../platforms/{self.build_config.PLATFORM}/NiteFury-and-LiteFury-firesim"
+
+        dest_alveo_dir = f"{dest_build_dir}/platforms/{self.build_config.PLATFORM}/NiteFury-and-LiteFury-firesim"
+
+        # copy alveo files to the build instance.
+        # do the rsync, but ignore any checkpoints that might exist on this machine
+        # (in case builds were run locally)
+        # extra_opts -L resolves symlinks
+
+        run(f"mkdir -p {dest_alveo_dir}")
+        run("rm -rf {}/{}".format(dest_alveo_dir, fpga_build_postfix))
+        rsync_cap = rsync_project(
+            local_dir=local_alveo_dir + "/",
+            remote_dir=dest_alveo_dir,
+            ssh_opts="-o StrictHostKeyChecking=no",
+            exclude="cl_*",
+            extra_opts="-L",
+            capture=True,
+        )
+        rootLogger.debug(rsync_cap)
+        rootLogger.debug(rsync_cap.stderr)
+        rsync_cap = rsync_project(
+            local_dir=f"{local_alveo_dir}/{fpga_build_postfix}/",
+            remote_dir=f"{dest_alveo_dir}/{fpga_build_postfix}",
+            ssh_opts="-o StrictHostKeyChecking=no",
+            extra_opts="-L",
+            capture=True,
+        )
+        rootLogger.debug(rsync_cap)
+        rootLogger.debug(rsync_cap.stderr)
+
+        return f"{dest_alveo_dir}/{fpga_build_postfix}"
+    
+    
+class RHSResearchLitefuryBitBuilder(XilinxAlveoBitBuilder):
+    """Bit builder class that builds an RHS Research Litefury II bitstream from the build config."""
+
+    BOARD_NAME: Optional[str]
+
+    def __init__(self, build_config: BuildConfig, args: Dict[str, Any]) -> None:
+        super().__init__(build_config, args)
+        self.BOARD_NAME = "rhsresearch_litefury"
+
+    def cl_dir_setup(self, chisel_sextuplet: str, dest_build_dir: str) -> str:
+        """Setup CL_DIR on build host.
+
+        Args:
+            chisel_sextuplet: Build config chisel sextuplet used to uniquely identify build dir.
+            dest_build_dir: Destination base directory to use.
+
+        Returns:
+            Path to CL_DIR directory (that is setup) or `None` if invalid.
+        """
+        fpga_build_postfix = f"Sample-Projects/Project-0/cl_{chisel_sextuplet}"
 
         # local paths
         local_alveo_dir = f"{get_deploy_dir()}/../platforms/{self.build_config.PLATFORM}/NiteFury-and-LiteFury-firesim"

@@ -1,0 +1,13 @@
+{
+	"benchmark_name": "flash_attention",
+	"common_simulation_outputs": [
+		"uartlog",
+		"TRACEFILE-C*",
+		"AUTOCOUNTER*",
+		"*.vcd",
+		"TRACEDOCTOR*"
+	],
+	"post_run_hook": "../../../../../../../sims/firesim-workloads/radiance-workload/radiance_post_run_hooks.sh ",
+	"common_bootbinary": "../../../../../../../sims/firesim-workloads/radiance-workload/flash_attention.soc.elf",
+	"common_rootfs": "../../../../../software/firemarshal/boards/default/installers/firesim/dummy.rootfs"
+}

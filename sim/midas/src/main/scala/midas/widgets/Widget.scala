@@ -210,6 +210,7 @@ abstract class WidgetImp(wrapper: Widget) extends LazyModuleImp(wrapper) {
     guard:                  String          = "GET_BRIDGE_CONSTRUCTOR",
     hasStreams:             Boolean         = false,
     hasLoadMem:             Boolean         = false,
+    hasOptionalLoadMem:     Boolean         = false,
     hasMMIOAddrMap:         Boolean         = false,
   ): Unit = {
     val mmioName = wrapper.getWName.toUpperCase.split("_").head
@@ -243,6 +244,9 @@ abstract class WidgetImp(wrapper: Widget) extends LazyModuleImp(wrapper) {
     }
     if (hasLoadMem) {
       sb.append("  registry.get_widget<loadmem_t>(),\n")
+    }
+    if (hasOptionalLoadMem) {
+      sb.append("  registry.get_widget_opt<loadmem_t>(),\n")
     }
     if (hasMMIOAddrMap) {
       crRegistry.genAddressMap(base, sb)

@@ -1,0 +1,4 @@
+This workload was generated using FireMarshal. See the following config
+and workload directory for details:
+../../../../../../../sims/firesim-workloads/baremetal-workload/marshal-configs/baremetal.json
+../../../../../../../sims/firesim-workloads/baremetal-workload
